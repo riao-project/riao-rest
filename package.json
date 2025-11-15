@@ -1,7 +1,7 @@
 {
-	"name": "{{project-name}}",
+	"name": "riao-rest",
 	"version": "1.0.0",
-	"description": "{{project-name}}",
+	"description": "riao-rest",
 	"private": "true",
 	"typescript-template": {
 		"base": "1.0.1",
@@ -41,13 +41,13 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/{{project-org}}/{{project-name}}.git"
+		"url": "git+https://github.com/riao-rest/riao-rest.git"
 	},
-	"author": "{{project-org}}",
+	"author": "riao-rest",
 	"license": "MIT",
 	"bugs": {
-		"url": "https://github.com/{{project-org}}/{{project-name}}/issues"
+		"url": "https://github.com/riao-rest/riao-rest/issues"
 	},
-	"homepage": "https://github.com/{{project-org}}/{{project-name}}#readme",
+	"homepage": "https://github.com/riao-rest/riao-rest#readme",
 	"keywords": []
 }

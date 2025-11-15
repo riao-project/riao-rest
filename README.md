@@ -1,4 +1,4 @@
-# {{project-name}} - Readme
+# riao-rest - Readme
 
 ## Contributing & Development
 
