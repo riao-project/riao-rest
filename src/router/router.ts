@@ -4,7 +4,7 @@ import { DatabaseRecordWithId } from '../endpoints';
 import { BaseApiRoute } from 'api-machine/router/base';
 
 export abstract class RiaoRouter<
-	T extends DatabaseRecordWithId,
+	T extends DatabaseRecordWithId = DatabaseRecordWithId,
 > extends BaseApiRouter {
 	repo?: QueryRepository<T>;
 
