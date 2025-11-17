@@ -1,6 +1,10 @@
 import { ApiRequest, NotFoundError } from 'api-machine';
 import { RiaoEndpoint, DatabaseRecordWithId } from './base-endpoint';
-import { EndpointMethod } from 'api-machine/router/endpoint';
+import {
+	ApiNextFunction,
+	ApiResponse,
+	EndpointMethod,
+} from 'api-machine/router/endpoint';
 
 export class RiaoUpdateEndpoint<
 	T extends DatabaseRecordWithId,
@@ -15,7 +19,13 @@ export class RiaoUpdateEndpoint<
 		};
 	}
 
-	override async handle(request: ApiRequest) {
+	override async handle(
+		request: ApiRequest,
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		response: ApiResponse,
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		next: ApiNextFunction
+	) {
 		const id = (request.params as { id: string }).id;
 		const updateData = request.body as Partial<T>;
 

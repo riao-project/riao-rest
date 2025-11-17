@@ -1,6 +1,10 @@
 import { ApiRequest, ConflictError } from 'api-machine';
 import { RiaoEndpoint, DatabaseRecordWithId } from './base-endpoint';
-import { EndpointMethod } from 'api-machine/router/endpoint';
+import {
+	ApiNextFunction,
+	ApiResponse,
+	EndpointMethod,
+} from 'api-machine/router/endpoint';
 
 export class RiaoCreateEndpoint<
 	T extends DatabaseRecordWithId,
@@ -16,7 +20,13 @@ export class RiaoCreateEndpoint<
 		};
 	}
 
-	override async handle(request: ApiRequest) {
+	override async handle(
+		request: ApiRequest,
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		response: ApiResponse,
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		next: ApiNextFunction
+	) {
 		const result = await this.repo.insertOne({
 			record: request.body as T,
 		});
