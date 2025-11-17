@@ -1,9 +1,4 @@
-import {
-	ApiRequest,
-	BaseApiRouter,
-	ConflictError,
-	RestServer,
-} from 'api-machine';
+import { ApiRequest, ConflictError, RestServer } from 'api-machine';
 import {
 	RiaoCreateEndpoint,
 	RiaoGetListEndpoint,
@@ -21,6 +16,7 @@ import {
 	RangeValidator,
 	TrimSanitizer,
 } from 'valsan';
+import { RiaoRouter } from '../../src/router';
 
 export interface User {
 	id: string;
@@ -50,7 +46,6 @@ const nameValidator = new ComposedValSan([
 ]);
 
 class CreateUserEndpoint extends RiaoCreateEndpoint<User> {
-	override repo = repo;
 	override description = 'Create a new user';
 
 	override bodyExample = {
@@ -83,13 +78,9 @@ class CreateUserEndpoint extends RiaoCreateEndpoint<User> {
 	}
 }
 
-class ListUsersEndpoint extends RiaoGetListEndpoint<User> {
-	override repo = repo;
-}
+class ListUsersEndpoint extends RiaoGetListEndpoint<User> {}
 
 class GetUserEndpoint extends RiaoGetOneEndpoint<User> {
-	override repo = repo;
-
 	override paramsExample = {
 		id: '1',
 	};
@@ -100,8 +91,6 @@ class GetUserEndpoint extends RiaoGetOneEndpoint<User> {
 }
 
 class UpdateUserEndpoint extends RiaoUpdateEndpoint<User> {
-	override repo = repo;
-
 	override paramsExample = {
 		id: '1',
 	};
@@ -122,8 +111,6 @@ class UpdateUserEndpoint extends RiaoUpdateEndpoint<User> {
 }
 
 class DeleteUserEndpoint extends RiaoDeleteEndpoint<User> {
-	override repo = repo;
-
 	override paramsExample = {
 		id: '1',
 	};
@@ -133,7 +120,8 @@ class DeleteUserEndpoint extends RiaoDeleteEndpoint<User> {
 	});
 }
 
-class UsersRouter extends BaseApiRouter {
+class UsersRouter extends RiaoRouter<User> {
+	override repo = repo;
 	override path = '/users';
 
 	protected override async routes(): Promise<ApiRoute[]> {
