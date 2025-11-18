@@ -17,6 +17,7 @@ import {
 	TrimSanitizer,
 } from 'valsan';
 import { RiaoRouter } from '../../src/router';
+import { RiaoSearchEndpoint } from '../../src/endpoints/search-endpoint';
 
 export interface User {
 	id: string;
@@ -79,6 +80,7 @@ class CreateUserEndpoint extends RiaoCreateEndpoint<User> {
 }
 
 class ListUsersEndpoint extends RiaoGetListEndpoint<User> {}
+class SearchUsersEndpoint extends RiaoSearchEndpoint<User> {}
 
 class GetUserEndpoint extends RiaoGetOneEndpoint<User> {
 	override paramsExample = {
@@ -129,6 +131,7 @@ class UsersRouter extends RiaoRouter<User> {
 			CreateUserEndpoint,
 			GetUserEndpoint,
 			ListUsersEndpoint,
+			SearchUsersEndpoint,
 			UpdateUserEndpoint,
 			DeleteUserEndpoint,
 		];

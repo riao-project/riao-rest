@@ -152,10 +152,40 @@ class CreateEndpoint extends RiaoCreateEndpoint<YourModel> {
 
 ### RiaoGetListEndpoint
 
-Retrieves all records from the database.
+Retrieves records from the database with pagination & sorting.
 
 ```typescript
 class ListEndpoint extends RiaoGetListEndpoint<YourModel> {}
+```
+
+### RiaoSearchEndpoint
+
+Retrieves records from the database with pagination & sorting.
+
+```typescript
+class SearchEndpoint extends RiaoSearchEndpoint<YourModel> {
+  override responseExample = {
+    records: [
+      {
+        id: 1,
+        name: 'Example',
+        email: 'example@example.com'
+      }
+    ],
+    count: 148,
+  };
+
+  override response = new ObjectValSan({
+    schema: {
+      records: new ArrayValSan({
+        schema: new ObjectValSan({ schema: userValidators }),
+      }),
+      count: new ComposedValSan([
+        new StringToNumberValSan()
+      ]),
+    },
+  });
+}
 ```
 
 ### RiaoGetOneEndpoint
