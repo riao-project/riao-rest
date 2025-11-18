@@ -1,0 +1,1 @@
+export { RiaoRouter } from './router';

@@ -1,7 +1,7 @@
 {
-	"name": "riao-rest",
+	"name": "@riao/rest",
 	"version": "1.0.0",
-	"description": "riao-rest",
+	"description": "Riao REST API framework",
 	"private": "true",
 	"typescript-template": {
 		"base": "1.0.1",
@@ -21,8 +21,15 @@
 		"script": "ts-node scripts",
 		"publish": "npm run script -- publish"
 	},
+	"dependencies": {
+		"@riao/dbal": "^3.7.0",
+		"api-machine": "^1.2.0",
+		"valsan": "^2.3.0"
+	},
 	"devDependencies": {
 		"@istanbuljs/nyc-config-typescript": "^1.0.2",
+		"@riao/cli": "^3.0.1",
+		"@riao/sqlite": "^3.4.0",
 		"@types/jasmine": "^5.1.4",
 		"@types/node": "^18.19.39",
 		"@typescript-eslint/eslint-plugin": "^7.13.1",
@@ -32,6 +39,7 @@
 		"prettier": "^3.3.2",
 		"prettier-eslint": "^16.3.0",
 		"prettier-eslint-cli": "^8.0.1",
+		"ts-appconfig": "^1.2.0",
 		"ts-node": "^10.9.2",
 		"ts-packager": "^1.1.0",
 		"ts-script": "^1.0.0",
@@ -41,13 +49,30 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/riao-rest/riao-rest.git"
+		"url": "git+https://github.com/riao-project/riao-rest.git"
 	},
-	"author": "riao-rest",
+	"author": "riao-project",
 	"license": "MIT",
 	"bugs": {
-		"url": "https://github.com/riao-rest/riao-rest/issues"
+		"url": "https://github.com/riao-project/riao-rest/issues"
 	},
-	"homepage": "https://github.com/riao-rest/riao-rest#readme",
-	"keywords": []
+	"homepage": "https://github.com/riao-project/riao-rest#readme",
+	"keywords": [
+		"riao",
+		"rest",
+		"api",
+		"framework",
+		"typescript",
+		"nodejs",
+		"express",
+		"dbal",
+		"swagger",
+		"openapi",
+		"endpoint",
+		"server",
+		"router",
+		"controller",
+		"database",
+		"backend"
+	]
 }

@@ -1,1 +1,2 @@
-export const a = true;
+export * from './endpoints';
+export * from './router';
