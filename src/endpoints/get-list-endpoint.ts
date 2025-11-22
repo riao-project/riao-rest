@@ -50,8 +50,8 @@ export class RiaoGetListEndpoint<
 	override queryExample = {
 		limit: 100,
 		offset: 0,
-		orderBy: 'name',
-		orderDirection: 'ASC',
+		orderBy: 'id',
+		orderDirection: 'DESC',
 	};
 
 	override query = new ObjectSanitizer({
