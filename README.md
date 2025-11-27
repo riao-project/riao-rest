@@ -36,7 +36,7 @@ import {
     RiaoUpdateEndpoint,
     RiaoDeleteEndpoint
 } from 'riao-rest';
-import { ObjectSanitizer, LengthValidator } from 'valsan';
+import { ObjectValSan, LengthValidator } from 'valsan';
 
 import { maindb } from '../database/main';
 
@@ -68,39 +68,51 @@ const userValidators = {
 
 // Create endpoints by extending base classes
 class CreateUserEndpoint extends RiaoCreateEndpoint<User> {
-  override body = new ObjectSanitizer({
-    name: userValidators.name,
-    email: userValidators.email,
+  override body = new ObjectValSan({
+    schema: {
+      name: userValidators.name,
+      email: userValidators.email,
+    }
   });
 
-  override response = new ObjectSanitizer({
-    id: userValidators.id
-  })
+  override response = new ObjectValSan({
+    schema: {
+      id: userValidators.id
+    }
+  });
 }
 
 class ListUsersEndpoint extends RiaoGetListEndpoint<User> {}
 
 class GetUserEndpoint extends RiaoGetOneEndpoint<User> {
-    override params = new ObjectSanitizer({
-        id: userValidators.id
-    });
+  override params = new ObjectValSan({
+    schema: {
+      id: userValidators.id
+    }
+  });
 }
 
 class UpdateUserEndpoint extends RiaoUpdateEndpoint<User> {
-    override params = new ObjectSanitizer({
-        id: userValidators.id
-    });
+  override params = new ObjectValSan({
+    schema: {
+      id: userValidators.id
+    }
+  });
 
-    override body = new ObjectSanitizer({
-        name: userValidation.name.copy({ isOptional: true }),
-        email: userValidation.email.copy({ isOptional: true })
-    })
+  override body = new ObjectValSan({
+    schema: {
+      name: userValidation.name.copy({ isOptional: true }),
+      email: userValidation.email.copy({ isOptional: true })
+    }
+  });
 }
 
 class DeleteUserEndpoint extends RiaoDeleteEndpoint<User> {
-    override params = new ObjectSanitizer({
-        id: userValidators.id
-    });
+  override params = new ObjectValSan({
+    schema: {
+      id: userValidators.id
+    }
+  });
 }
 
 // Set up the router
@@ -141,7 +153,7 @@ Creates new records with automatic validation and conflict checking.
 
 ```typescript
 class CreateEndpoint extends RiaoCreateEndpoint<YourModel> {
-  override body = new ObjectSanitizer({ /* validators */ });
+  override body = new ObjectValSan({ schema: { /* validators */ }});
   
   // Optional: Check for conflicts before creating
   override async checkConflict(request: ApiRequest): Promise<void> {
@@ -194,7 +206,7 @@ Retrieves a single record by ID with automatic 404 handling.
 
 ```typescript
 class GetEndpoint extends RiaoGetOneEndpoint<YourModel> {
-  override params = new ObjectSanitizer({ /* validators */ });
+  override params = new ObjectValSan({ schema: { /* validators */ }});
 }
 ```
 
@@ -204,8 +216,8 @@ Updates existing records with partial data support.
 
 ```typescript
 class UpdateEndpoint extends RiaoUpdateEndpoint<YourModel> {
-  override params = new ObjectSanitizer({ /* validators */ });
-  override body = new ObjectSanitizer({ /* validators */ });
+  override params = new ObjectValSan({ schema: { /* validators */ }});
+  override body = new ObjectValSan({ schema: { /* validators */ }});
 }
 ```
 
@@ -215,7 +227,7 @@ Deletes records by ID.
 
 ```typescript
 class DeleteEndpoint extends RiaoDeleteEndpoint<YourModel> {
-  override params = new ObjectSanitizer({ /* validators */ });
+  override params = new ObjectValSan({ schema: { /* validators */ }});
 }
 ```
 

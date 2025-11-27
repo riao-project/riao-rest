@@ -12,7 +12,7 @@ import {
 	ComposedValSan,
 	EmailValidator,
 	LengthValidator,
-	ObjectSanitizer,
+	ObjectValSan,
 	RangeValidator,
 	TrimSanitizer,
 } from 'valsan';
@@ -54,9 +54,11 @@ class CreateUserEndpoint extends RiaoCreateEndpoint<User> {
 		email: 'john.doe@example.com',
 	};
 
-	override body = new ObjectSanitizer({
-		name: nameValidator,
-		email: emailValidator,
+	override body = new ObjectValSan({
+		schema: {
+			name: nameValidator,
+			email: emailValidator,
+		},
 	});
 
 	override getErrors() {
@@ -87,8 +89,10 @@ class GetUserEndpoint extends RiaoGetOneEndpoint<User> {
 		id: '1',
 	};
 
-	override params = new ObjectSanitizer({
-		id: idValidator,
+	override params = new ObjectValSan({
+		schema: {
+			id: idValidator,
+		},
 	});
 }
 
@@ -97,8 +101,10 @@ class UpdateUserEndpoint extends RiaoUpdateEndpoint<User> {
 		id: '1',
 	};
 
-	override params = new ObjectSanitizer({
-		id: idValidator,
+	override params = new ObjectValSan({
+		schema: {
+			id: idValidator,
+		},
 	});
 
 	override bodyExample = {
@@ -106,9 +112,11 @@ class UpdateUserEndpoint extends RiaoUpdateEndpoint<User> {
 		email: 'jane.doe@example.com',
 	};
 
-	override body = new ObjectSanitizer({
-		name: nameValidator.copy({ isOptional: true }),
-		email: emailValidator.copy({ isOptional: true }),
+	override body = new ObjectValSan({
+		schema: {
+			name: nameValidator.copy({ isOptional: true }),
+			email: emailValidator.copy({ isOptional: true }),
+		},
 	});
 }
 
@@ -117,8 +125,10 @@ class DeleteUserEndpoint extends RiaoDeleteEndpoint<User> {
 		id: '1',
 	};
 
-	override params = new ObjectSanitizer({
-		id: idValidator,
+	override params = new ObjectValSan({
+		schema: {
+			id: idValidator,
+		},
 	});
 }
 
