@@ -25,8 +25,8 @@ export class RiaoSearchEndpoint<
 	override bodyExample = {
 		limit: 100,
 		offset: 0,
-		orderBy: 'name',
-		orderDirection: 'ASC',
+		orderBy: 'id',
+		orderDirection: 'DESC',
 	};
 
 	override body = new ObjectValSan({
