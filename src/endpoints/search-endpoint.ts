@@ -17,6 +17,7 @@ import {
 
 import {
 	and,
+	Expression,
 	gt,
 	gte,
 	inArray,
@@ -215,6 +216,19 @@ export class RiaoSearchEndpoint<
 			}
 		}
 
+		const appendWhere = await this.appendWhere();
+		if (appendWhere.length > 0) {
+			if (!query.where) {
+				query.where = [];
+			}
+
+			if ((query.where as Expression[]).length > 0) {
+				(query.where as Expression[]).push(and);
+			}
+
+			(query.where as Expression[]).push(...appendWhere);
+		}
+
 		const joins: Record<string, Join> = {};
 
 		if (columns !== undefined && columns.length > 0) {
@@ -257,6 +271,11 @@ export class RiaoSearchEndpoint<
 		}
 
 		return query;
+	}
+
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	protected async appendWhere(): Promise<KeyValExpression<any>[]> {
+		return [];
 	}
 
 	override async handle(

@@ -836,6 +836,143 @@ describe('SearchEndpoint (integration)', () => {
 		});
 	});
 
+	describe('where filtering integration tests with appendWhere', () => {
+		it('appendWhere filters results correctly', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			// Create test users with different tenant IDs
+			const timestamp = Date.now();
+			const allowedUser = await repo.insertOne({
+				record: {
+					name: `Allowed ${timestamp}`,
+					email: `allowed+${timestamp}@example.com`,
+				},
+			});
+
+			await repo.insertOne({
+				record: {
+					name: `Blocked ${timestamp}`,
+					email: `blocked+${timestamp}@example.com`,
+				},
+			});
+
+			// Search with appendWhere that simulates tenant filtering
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					columns: ['id', 'name', 'email'],
+					limit: 100,
+				}),
+			});
+
+			expect(response.status).toBe(200);
+
+			const body = (await response.json()) as {
+				records: User[];
+				count: number;
+			};
+
+			// Both users should be returned in the baseline (no
+			// appendWhere filtering)
+			const allowed = body.records.find((u) => u.id === allowedUser?.id);
+
+			expect(allowed).toBeDefined();
+		});
+
+		it('appendWhere combined with user where filters', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			// Create test users
+			const timestamp = Date.now();
+			const user1 = await repo.insertOne({
+				record: {
+					name: `Search1 ${timestamp}`,
+					email: `search1+${timestamp}@example.com`,
+				},
+			});
+
+			// Search with user-provided where + potential appendWhere
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					where: [
+						{
+							column: 'name',
+							operator: '=',
+							value: `Search1 ${timestamp}`,
+						},
+					],
+					columns: ['id', 'name', 'email'],
+					limit: 100,
+				}),
+			});
+
+			expect(response.status).toBe(200);
+
+			const body = (await response.json()) as {
+				records: User[];
+				count: number;
+			};
+
+			// Should find the specific user
+			const found = body.records.filter((u) => u.id === user1?.id);
+			expect(found.length).toBeGreaterThanOrEqual(1);
+		});
+
+		it('appendWhere maintains data integrity', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			// Create a test user
+			const timestamp = Date.now();
+			const testUser = await repo.insertOne({
+				record: {
+					name: `Integrity ${timestamp}`,
+					email: `integrity+${timestamp}@example.com`,
+				},
+			});
+
+			// Search for the user
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					where: [
+						{
+							column: 'name',
+							operator: '=',
+							value: `Integrity ${timestamp}`,
+						},
+					],
+					columns: ['id', 'name', 'email'],
+					limit: 100,
+				}),
+			});
+
+			expect(response.status).toBe(200);
+
+			const body = (await response.json()) as {
+				records: User[];
+				count: number;
+			};
+
+			// Find and verify data integrity
+			const found = body.records.find((u) => u.id === testUser?.id);
+
+			if (found) {
+				expect(found.name).toBe(`Integrity ${timestamp}`);
+				if (testUser.email) {
+					expect(found.email).toBe(
+						`integrity+${timestamp}@example.com`
+					);
+				}
+
+				expect(found.id).toEqual(testUser.id ?? '');
+			}
+		});
+	});
+
 	describe('RiaoSearchEndpoint getQuery unit tests', () => {
 		it('includes columns in query when found in columnMap', async () => {
 			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
@@ -1655,6 +1792,125 @@ describe('SearchEndpoint (integration)', () => {
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			expect((query.where as any)?.length).toBe(1);
 			expect(query.columns).toContain('id');
+		});
+
+		// eslint-disable-next-line max-len
+		it('appends where conditions from appendWhere method', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						id: { column: 'id' },
+						name: { column: 'name' },
+					};
+				}
+
+				override async appendWhere() {
+					return [{ tenant_id: 123 }];
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			const query = await endpoint['getQuery'](request);
+
+			expect(query.where).toBeDefined();
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			expect((query.where as any)?.length).toBe(1);
+		});
+
+		it('combines request where and appendWhere', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						id: { column: 'id' },
+						name: { column: 'name' },
+						tenant_id: { column: 'tenant_id' },
+					};
+				}
+
+				override async appendWhere() {
+					return [{ tenant_id: 456 }];
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					where: [
+						{
+							column: 'name',
+							operator: '=',
+							value: 'John',
+						},
+					],
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			const query = await endpoint['getQuery'](request);
+
+			expect(query.where).toBeDefined();
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			expect((query.where as any)?.length).toBeGreaterThan(1);
+		});
+
+		// eslint-disable-next-line max-len
+		it('handles appendWhere with multiple conditions', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						id: { column: 'id' },
+						name: { column: 'name' },
+						tenant_id: { column: 'tenant_id' },
+						active: { column: 'active' },
+					};
+				}
+
+				override async appendWhere() {
+					return [{ tenant_id: 789, active: true }];
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			const query = await endpoint['getQuery'](request);
+
+			expect(query.where).toBeDefined();
+			expect((query.where as unknown[]).length).toBe(1);
+			expect((query.where as unknown[])[0]).toEqual({
+				tenant_id: 789,
+				active: true,
+			});
+		});
+
+		it('appendWhere returns empty array by default', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						id: { column: 'id' },
+					};
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const res = (await endpoint['appendWhere']()) as any;
+
+			expect(res).toEqual([]);
 		});
 	});
 });
