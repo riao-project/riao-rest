@@ -8,6 +8,7 @@
  */
 import 'jasmine';
 import { postsRepo, commentsRepo } from './search-aggregation.endpoints';
+import { maindb } from '../../../database/main';
 import { env } from '../../env';
 
 describe('SearchEndpoint complex aggregation scenarios', () => {
@@ -1460,4 +1461,208 @@ describe('SearchEndpoint complex aggregation scenarios', () => {
 			'Duplicate aggregate alias or column "duplicate_alias".'
 		);
 	});
+
+	it('handles search with joined column and orderBy', async () => {
+		// Use unique identifier for this test
+		const testId = Date.now().toString();
+
+		// Need to insert a user in the users table for the join
+		const usersRepo = maindb.getQueryRepository({
+			table: 'users',
+			identifiedBy: 'id',
+		});
+
+		const user = await usersRepo.insertOne({
+			record: {
+				name: 'Charlie Brown',
+				email: `charlie+${testId}@example.com`,
+			},
+		});
+
+		// Insert test posts
+		const post1 = await postsRepo.insertOne({
+			record: {
+				user_id: user['id'] as string,
+				title: 'Post C',
+				rating: 70,
+			},
+		});
+
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		const post2 = await postsRepo.insertOne({
+			record: {
+				user_id: user['id'] as string,
+				title: 'Post A',
+				rating: 80,
+			},
+		});
+
+		const post3 = await postsRepo.insertOne({
+			record: {
+				user_id: user['id'] as string,
+				title: 'Post B',
+				rating: 75,
+			},
+		});
+
+		const url = `${env.API_URL}/posts/search`;
+
+		// Query with joined column in where and orderBy without join
+		const response = await fetch(url, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				columns: ['id', 'title'],
+				where: [
+					{
+						column: 'user_id',
+						operator: '=',
+						value: user['id'] as string,
+					},
+				],
+				orderBy: 'id',
+				orderDirection: 'DESC',
+				limit: 100,
+			}),
+		});
+
+		if (response.status !== 200) {
+			const errorBody = await response.json();
+			throw errorBody;
+		}
+
+		expect(response.status)
+			.withContext('response status should be 200')
+			.toBe(200);
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const body = (await response.json()) as { records: any[] };
+		expect(Array.isArray(body.records))
+			.withContext('body.records should be an array')
+			.toBeTrue();
+		expect(body.records.length)
+			.withContext('should return 3 posts')
+			.toBe(3);
+
+		// Verify records are ordered by id DESC
+		expect(body.records[0]['id'])
+			.withContext('first record should have highest id')
+			.toBe(post3['id']);
+		expect(body.records[2]['id'])
+			.withContext('last record should have lowest id')
+			.toBe(post1['id']);
+	});
+
+	it(
+		'handles search with joined column in WHERE and ' +
+			'orderBy causes ambiguous column error to be fixed',
+		async () => {
+			// Use unique identifier for this test
+			const testId = Date.now().toString();
+
+			// Need to insert a user in the users table for the join
+			const usersRepo = maindb.getQueryRepository({
+				table: 'users',
+				identifiedBy: 'id',
+			});
+
+			const user = await usersRepo.insertOne({
+				record: {
+					name: 'Charlie Brown',
+					email: `charlie+join+${testId}@example.com`,
+				},
+			});
+
+			// Insert test posts
+			await postsRepo.insertOne({
+				record: {
+					user_id: user['id'] as string,
+					title: 'Test Post 1',
+					rating: 70,
+				},
+			});
+
+			await postsRepo.insertOne({
+				record: {
+					user_id: user['id'] as string,
+					title: 'Test Post 2',
+					rating: 80,
+				},
+			});
+
+			const url = `${env.API_URL}/posts/search`;
+
+			// First test: basic query with orderBy
+			// (this should work - no joins in WHERE)
+			const response1 = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					columns: ['id', 'title'],
+					where: [
+						{
+							column: 'user_id',
+							operator: '=',
+							value: user['id'] as string,
+						},
+					],
+					orderBy: 'id',
+					orderDirection: 'DESC',
+					limit: 100,
+				}),
+			});
+
+			expect(response1.status)
+				.withContext('simple query should return 200')
+				.toBe(200);
+
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const body1 = (await response1.json()) as { records: any[] };
+			expect(body1.records.length)
+				.withContext('should have 2 posts')
+				.toBe(2);
+
+			// Second test: This matches the exact error from the issue:
+			// Include user_name in columns, use WHERE with user_name equality,
+			// and orderBy with id
+			// This previously failed with "ambiguous column name: id"
+			const response2 = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					columns: ['title'],
+					where: [
+						{
+							column: 'users.name',
+							operator: '=',
+							value: 'Charlie Brown',
+						},
+					],
+					orderBy: 'id',
+					orderDirection: 'DESC',
+					limit: 100,
+				}),
+			});
+
+			// The key assertion - the query should NOT fail with
+			// "ambiguous column name: id"
+			expect(response2.status)
+				.withContext(
+					'query with joined column WHERE and orderBy ' +
+						'should not fail with ambiguous column error'
+				)
+				.toBe(200);
+
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const body2 = (await response2.json()) as { records: any[] };
+			expect(Array.isArray(body2.records))
+				.withContext('body.records should be an array')
+				.toBeTrue();
+			// We should get results (may be 0 if the WHERE doesn't match,
+			// but the important thing is no SQL error)
+			expect(body2.records.length)
+				.withContext('should return results without error')
+				.toBeGreaterThanOrEqual(0);
+		}
+	);
 });

@@ -375,9 +375,10 @@ export class RiaoSearchEndpoint<
 		}
 
 		if (orderBy !== undefined && orderDirection !== undefined) {
-			query.orderBy = { [orderBy]: orderDirection } as Partial<
-				Record<keyof T, 'ASC' | 'DESC'>
-			>;
+			const mappedColumn = joinColumn(orderBy as string);
+			query.orderBy = {
+				[mappedColumn.column as string]: orderDirection,
+			} as Partial<Record<keyof T, 'ASC' | 'DESC'>>;
 		}
 
 		if (Object.keys(joins).length > 0) {
