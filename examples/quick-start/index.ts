@@ -12,12 +12,22 @@ import {
 	ComposedValSan,
 	EmailValidator,
 	LengthValidator,
-	ObjectSanitizer,
+	ObjectValSan,
 	RangeValidator,
 	TrimSanitizer,
 } from 'valsan';
 import { RiaoRouter } from '../../src/router';
 import { RiaoSearchEndpoint } from '../../src/endpoints/search-endpoint';
+import {
+	ListPostsEndpoint,
+	SearchPostsEndpoint,
+	ListCommentsEndpoint,
+	SearchCommentsEndpoint,
+	postsRepo,
+	commentsRepo,
+	Post,
+	Comment,
+} from '../../test/spec/endpoints/search-aggregation.endpoints';
 
 export interface User {
 	id: string;
@@ -54,9 +64,11 @@ class CreateUserEndpoint extends RiaoCreateEndpoint<User> {
 		email: 'john.doe@example.com',
 	};
 
-	override body = new ObjectSanitizer({
-		name: nameValidator,
-		email: emailValidator,
+	override body = new ObjectValSan({
+		schema: {
+			name: nameValidator,
+			email: emailValidator,
+		},
 	});
 
 	override getErrors() {
@@ -80,15 +92,26 @@ class CreateUserEndpoint extends RiaoCreateEndpoint<User> {
 }
 
 class ListUsersEndpoint extends RiaoGetListEndpoint<User> {}
-class SearchUsersEndpoint extends RiaoSearchEndpoint<User> {}
+
+class SearchUsersEndpoint extends RiaoSearchEndpoint<User> {
+	override getColumnMap() {
+		return {
+			id: { column: 'id' },
+			name: { column: 'name' },
+			email: { column: 'email' },
+		};
+	}
+}
 
 class GetUserEndpoint extends RiaoGetOneEndpoint<User> {
 	override paramsExample = {
 		id: '1',
 	};
 
-	override params = new ObjectSanitizer({
-		id: idValidator,
+	override params = new ObjectValSan({
+		schema: {
+			id: idValidator,
+		},
 	});
 }
 
@@ -97,8 +120,10 @@ class UpdateUserEndpoint extends RiaoUpdateEndpoint<User> {
 		id: '1',
 	};
 
-	override params = new ObjectSanitizer({
-		id: idValidator,
+	override params = new ObjectValSan({
+		schema: {
+			id: idValidator,
+		},
 	});
 
 	override bodyExample = {
@@ -106,9 +131,11 @@ class UpdateUserEndpoint extends RiaoUpdateEndpoint<User> {
 		email: 'jane.doe@example.com',
 	};
 
-	override body = new ObjectSanitizer({
-		name: nameValidator.copy({ isOptional: true }),
-		email: emailValidator.copy({ isOptional: true }),
+	override body = new ObjectValSan({
+		schema: {
+			name: nameValidator.copy({ isOptional: true }),
+			email: emailValidator.copy({ isOptional: true }),
+		},
 	});
 }
 
@@ -117,8 +144,10 @@ class DeleteUserEndpoint extends RiaoDeleteEndpoint<User> {
 		id: '1',
 	};
 
-	override params = new ObjectSanitizer({
-		id: idValidator,
+	override params = new ObjectValSan({
+		schema: {
+			id: idValidator,
+		},
 	});
 }
 
@@ -138,6 +167,30 @@ class UsersRouter extends RiaoRouter<User> {
 	}
 }
 
+export class PostsRouter extends RiaoRouter<Post> {
+	override repo = postsRepo;
+	override path = '/posts';
+
+	protected override async routes(): Promise<ApiRoute[]> {
+		return [ListPostsEndpoint, SearchPostsEndpoint];
+	}
+}
+
+export class CommentsRouter extends RiaoRouter<Comment> {
+	override repo = commentsRepo;
+	override path = '/comments';
+
+	protected override async routes(): Promise<ApiRoute[]> {
+		return [ListCommentsEndpoint, SearchCommentsEndpoint];
+	}
+}
+
+class MainRouter extends RiaoRouter {
+	protected override async routes(): Promise<ApiRoute[]> {
+		return [UsersRouter, PostsRouter, CommentsRouter];
+	}
+}
+
 export class Server extends RestServer {
-	override router = UsersRouter;
+	override router = MainRouter;
 }

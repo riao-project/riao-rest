@@ -3,7 +3,7 @@ import { RiaoEndpoint, DatabaseRecordWithId } from './base-endpoint';
 import {
 	ComposedValSan,
 	LengthValidator,
-	ObjectSanitizer,
+	ObjectValSan,
 	PatternValidator,
 	RangeValidator,
 	StringToNumberValSan,
@@ -50,15 +50,17 @@ export class RiaoGetListEndpoint<
 	override queryExample = {
 		limit: 100,
 		offset: 0,
-		orderBy: 'name',
-		orderDirection: 'ASC',
+		orderBy: 'id',
+		orderDirection: 'DESC',
 	};
 
-	override query = new ObjectSanitizer({
-		limit: listValidators.limit,
-		offset: listValidators.offset,
-		orderBy: listValidators.orderBy,
-		orderDirection: listValidators.orderDirection,
+	override query = new ObjectValSan({
+		schema: {
+			limit: listValidators.limit,
+			offset: listValidators.offset,
+			orderBy: listValidators.orderBy,
+			orderDirection: listValidators.orderDirection,
+		},
 	});
 
 	override async handle(
