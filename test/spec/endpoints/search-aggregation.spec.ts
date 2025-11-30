@@ -273,6 +273,7 @@ describe('SearchEndpoint complex aggregation scenarios', () => {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
+				columns: ['post_id'],
 				where: [
 					{
 						column: 'post_id',
@@ -590,6 +591,7 @@ describe('SearchEndpoint complex aggregation scenarios', () => {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
+				columns: ['user_id'],
 				where: [
 					// Filter to only include our test user IDs
 					// 	to avoid collision with other tests
@@ -1112,6 +1114,7 @@ describe('SearchEndpoint complex aggregation scenarios', () => {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
+				columns: ['user_id'],
 				where: [
 					{
 						column: 'user_id',

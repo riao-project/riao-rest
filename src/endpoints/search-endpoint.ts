@@ -84,6 +84,9 @@ export const searchValidators = {
 
 export interface RiaoSearchColumn<T extends DatabaseRecordWithId> {
 	column: SelectColumn<T> | string;
+	// TODO: May need to take array of joins for complex relations
+	// 	Currently, this relies on the user selecting all necessary
+	// 	other tables in a chain to satisfy joins
 	join?: Join;
 }
 
@@ -173,6 +176,24 @@ export class RiaoSearchEndpoint<
 
 		const columnMap = this.getColumnMap();
 
+		const joins: Record<string, Join> = {};
+		function joinColumn(column: string): RiaoSearchColumn<T> {
+			const mappedColumn = columnMap[column];
+
+			if (!mappedColumn) {
+				throw new UnprocessableEntityError(
+					`Column "${column}" is not a valid selectable column.`
+				);
+			}
+
+			if (mappedColumn.join) {
+				joins[mappedColumn.join.alias || mappedColumn.join.table] =
+					mappedColumn.join;
+			}
+
+			return mappedColumn;
+		}
+
 		if (where !== undefined && where.length > 0) {
 			if (!columns) {
 				columns = [];
@@ -182,21 +203,10 @@ export class RiaoSearchEndpoint<
 			query.where = [] as KeyValExpression<any>[];
 
 			for (const condition of where) {
-				if (!columns.includes(condition.column)) {
-					columns.push(condition.column);
-				}
+				const mappedColumn = joinColumn(condition.column);
 
 				if (query.where.length) {
 					query.where.push(and);
-				}
-
-				const mappedColumn = columnMap[condition.column];
-
-				if (!mappedColumn) {
-					throw new UnprocessableEntityError(
-						`Column "${condition.column}" is not a valid ` +
-							'filterable column.'
-					);
 				}
 
 				if (typeof mappedColumn.column !== 'string') {
@@ -280,12 +290,6 @@ export class RiaoSearchEndpoint<
 
 			for (const aggregate of aggregates) {
 				const mappedColumn = columnMap[aggregate.column];
-				if (!mappedColumn) {
-					throw new UnprocessableEntityError(
-						`Column "${aggregate.column}" is not a valid ` +
-							'selectable column.'
-					);
-				}
 
 				const key = aggregate.alias || aggregate.column;
 				if (selectColumns[key]) {
@@ -326,12 +330,7 @@ export class RiaoSearchEndpoint<
 					);
 				}
 
-				if (!columns.includes(aggregate.column)) {
-					// TODO: This is added to include joins etc. -
-					// 	but we don't really want to push the column
-					// 	to the select
-					columns.push(aggregate.column);
-				}
+				joinColumn(aggregate.column);
 
 				selectColumns[key] = {
 					query: dbfn,
@@ -349,75 +348,40 @@ export class RiaoSearchEndpoint<
 				);
 			}
 
-			// istanbul ignore next
-			if (!columns) {
-				// TODO: This is added to include joins etc. - but we don't
-				// 	really want to push the column to the select
-				// 	when only grouping
-				// istanbul ignore next
-				columns = [];
-			}
-
 			if (!query.groupBy) {
 				query.groupBy = [];
 			}
 
 			for (const col of groupBy) {
-				const mappedColumn = columnMap[col];
-
-				if (!mappedColumn) {
-					throw new UnprocessableEntityError(
-						`Column "${col}" is not a valid selectable column.`
-					);
-				}
-
-				if (!columns.includes(col)) {
-					columns.push(col);
-				}
+				const mappedColumn = joinColumn(col);
 
 				query.groupBy.push(mappedColumn.column as string);
 			}
 		}
 
-		const joins: Record<string, Join> = {};
-
 		if (columns !== undefined && columns.length > 0) {
 			for (const column of columns) {
-				const selectColumn = columnMap[column as string];
+				const selectColumn = joinColumn(column as string);
 
-				if (selectColumn) {
-					if (!selectColumns[selectColumn.column as string]) {
-						selectColumns[selectColumn.column as string] =
-							selectColumn.column;
-					}
-
-					if (selectColumn.join) {
-						joins[
-							selectColumn.join.alias || selectColumn.join.table
-						] = selectColumn.join;
-					}
-				}
-				else {
-					throw new UnprocessableEntityError(
-						`Column "${String(column)}" is not a valid ` +
-							'selectable column.'
-					);
+				if (!selectColumns[selectColumn.column as string]) {
+					selectColumns[selectColumn.column as string] =
+						selectColumn.column;
 				}
 			}
+		}
 
-			if (Object.keys(selectColumns).length > 0) {
-				query.columns = Object.values(selectColumns);
-			}
-
-			if (Object.keys(joins).length > 0) {
-				query.join = Object.values(joins);
-			}
+		if (Object.keys(selectColumns).length > 0) {
+			query.columns = Object.values(selectColumns);
 		}
 
 		if (orderBy !== undefined && orderDirection !== undefined) {
 			query.orderBy = { [orderBy]: orderDirection } as Partial<
 				Record<keyof T, 'ASC' | 'DESC'>
 			>;
+		}
+
+		if (Object.keys(joins).length > 0) {
+			query.join = Object.values(joins);
 		}
 
 		return query;

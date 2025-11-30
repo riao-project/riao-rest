@@ -240,7 +240,7 @@ describe('SearchEndpoint (integration)', () => {
 			expect(response.status).toBe(422);
 
 			const body = (await response.json()) as { message?: string };
-			expect(body.message).toContain('not a valid selectable column');
+			expect(body.message).toContain('not a valid selectable column.');
 		});
 
 		it('accepts empty `columns` array', async () => {
@@ -325,7 +325,7 @@ describe('SearchEndpoint (integration)', () => {
 			expect(response.status).toBe(422);
 
 			const body = (await response.json()) as { message?: string };
-			expect(body.message).toContain('not a valid selectable column');
+			expect(body.message).toContain('not a valid selectable column.');
 		});
 
 		it('rejects multiple columns with invalid column', async () => {
@@ -347,7 +347,7 @@ describe('SearchEndpoint (integration)', () => {
 			expect(response.status).toBe(422);
 
 			const body = (await response.json()) as { message?: string };
-			expect(body.message).toContain('not a valid selectable column');
+			expect(body.message).toContain('not a valid selectable column.');
 		});
 
 		it('returns records when `columns` is undefined', async () => {
@@ -506,7 +506,9 @@ describe('SearchEndpoint (integration)', () => {
 			expect(response.status).toBe(422);
 
 			const body = (await response.json()) as { message?: string };
-			expect(body.message).toContain('not a valid filterable column');
+			expect(body.message).toEqual(
+				'Column "nonexistent" is not a valid selectable column.'
+			);
 		});
 
 		it('rejects `where` with invalid operator', async () => {
@@ -1023,7 +1025,9 @@ describe('SearchEndpoint (integration)', () => {
 			// Should fail for security - column not in columnMap
 			expect(response.status).toBe(422);
 			const body = (await response.json()) as { message?: string };
-			expect(body.message).toContain('not a valid selectable column');
+			expect(body.message).toEqual(
+				'Column "nonexistent" is not a valid selectable column.'
+			);
 		});
 
 		it('rejects `aggregates` with invalid function', async () => {
@@ -1095,7 +1099,9 @@ describe('SearchEndpoint (integration)', () => {
 			expect(response.status).toBe(422);
 
 			const body = (await response.json()) as { message?: string };
-			expect(body.message).toContain('not a valid selectable column');
+			expect(body.message).toEqual(
+				'Column "nonexistent" is not a valid selectable column.'
+			);
 		});
 
 		it('rejects `groupBy` with invalid characters', async () => {
@@ -1953,36 +1959,6 @@ describe('SearchEndpoint (integration)', () => {
 			expect(where[2]).toEqual({ email: like('%example%') });
 		});
 
-		it('adds where column to columns array if not present', async () => {
-			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
-				override getColumnMap() {
-					return {
-						name: { column: 'name' },
-					};
-				}
-			}
-
-			const endpoint = new TestSearchEndpoint();
-			const request = {
-				body: {
-					where: [
-						{
-							column: 'name',
-							operator: '=',
-							value: 'John',
-						},
-					],
-					limit: 10,
-					offset: 0,
-				},
-			};
-
-			const query = await endpoint['getQuery'](request);
-
-			expect(query.columns).toBeDefined();
-			expect(query.columns).toContain('name');
-		});
-
 		it('rejects where with column not in columnMap', async () => {
 			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
 				override getColumnMap() {
@@ -2012,9 +1988,10 @@ describe('SearchEndpoint (integration)', () => {
 				fail('Expected UnprocessableEntityError');
 			}
 			catch (error) {
-				const errMsg = 'not a valid filterable column';
 				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				expect((error as any).message).toContain(errMsg);
+				expect((error as any).message).toEqual(
+					'Column "name" is not a valid selectable column.'
+				);
 			}
 		});
 
@@ -2162,7 +2139,7 @@ describe('SearchEndpoint (integration)', () => {
 							value: 'John',
 						},
 					],
-					columns: ['id', 'email'],
+					columns: ['id', 'email', 'name'],
 					limit: 10,
 					offset: 0,
 				},
@@ -2272,6 +2249,7 @@ describe('SearchEndpoint (integration)', () => {
 			const endpoint = new TestSearchEndpoint();
 			const request = {
 				body: {
+					columns: ['id'],
 					where: [
 						{
 							column: 'id',
@@ -2307,6 +2285,7 @@ describe('SearchEndpoint (integration)', () => {
 			// eslint-disable-next-line max-len
 			const request = {
 				body: {
+					columns: ['id'],
 					where: [
 						{
 							column: 'id',
@@ -2633,7 +2612,7 @@ describe('SearchEndpoint (integration)', () => {
 				fail('Expected UnprocessableEntityError');
 			}
 			catch (error) {
-				const errMsg = 'not a valid selectable column';
+				const errMsg = 'not a valid selectable column.';
 				// eslint-disable-next-line @typescript-eslint/no-explicit-any
 				expect((error as any).message).toContain(errMsg);
 			}
@@ -2803,7 +2782,7 @@ describe('SearchEndpoint (integration)', () => {
 				fail('Expected UnprocessableEntityError');
 			}
 			catch (error) {
-				const errMsg = 'not a valid selectable column';
+				const errMsg = 'not a valid selectable column.';
 				// eslint-disable-next-line @typescript-eslint/no-explicit-any
 				expect((error as any).message).toContain(errMsg);
 			}
