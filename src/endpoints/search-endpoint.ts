@@ -17,6 +17,7 @@ import {
 
 import {
 	and,
+	between,
 	DatabaseFunctions,
 	Expression,
 	gt,
@@ -48,7 +49,16 @@ export const whereConditionValidator = new ObjectValSan({
 	schema: {
 		column: columnNameValidator,
 		operator: new EnumValidator({
-			allowedValues: ['=', '<', '<=', '>', '>=', 'LIKE', 'INARRAY'],
+			allowedValues: [
+				'=',
+				'<',
+				'<=',
+				'>',
+				'>=',
+				'LIKE',
+				'INARRAY',
+				'BETWEEN',
+			],
 		}),
 		// TODO: value: new ComposedValSan([...]),
 	},
@@ -92,8 +102,10 @@ export interface RiaoSearchColumn<T extends DatabaseRecordWithId> {
 
 export interface RiaoSearchCondition {
 	column: string;
-	operator: '=' | '<' | '<=' | '>' | '>=' | 'LIKE' | 'INARRAY';
+	operator: '=' | '<' | '<=' | '>' | '>=' | 'LIKE' | 'INARRAY' | 'BETWEEN';
 	value: string | number | boolean | null;
+	minValue?: string | number;
+	maxValue?: string | number;
 }
 
 export type AggregateFunction = 'count' | 'sum' | 'avg' | 'min' | 'max';
@@ -256,6 +268,24 @@ export class RiaoSearchEndpoint<
 
 					query.where.push(<KeyValExpression<T>>{
 						[mappedColumn.column]: inArray(values),
+					});
+				}
+				else if (condition.operator === 'BETWEEN') {
+					if (
+						condition.minValue === undefined ||
+						condition.maxValue === undefined
+					) {
+						throw new UnprocessableEntityError(
+							'BETWEEN operator requires both minValue and ' +
+								`maxValue for column "${condition.column}".`
+						);
+					}
+
+					query.where.push(<KeyValExpression<T>>{
+						[mappedColumn.column]: between(
+							condition.minValue,
+							condition.maxValue
+						),
 					});
 				}
 			}

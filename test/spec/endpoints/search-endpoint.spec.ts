@@ -838,6 +838,110 @@ describe('SearchEndpoint (integration)', () => {
 			);
 			expect(filtered.length).toBeGreaterThanOrEqual(2);
 		});
+
+		it('filters with BETWEEN WHERE condition', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			// Create test users with different IDs
+			const timestamp = Date.now();
+			const user1 = await repo.insertOne({
+				record: {
+					name: `Between User 1 ${timestamp}`,
+					email: `between1+${timestamp}@example.com`,
+				},
+			});
+
+			const user2 = await repo.insertOne({
+				record: {
+					name: `Between User 2 ${timestamp}`,
+					email: `between2+${timestamp}@example.com`,
+				},
+			});
+
+			// Get user IDs for range
+			const id1 = user1?.id ? Number(user1.id) : 0;
+			const id2 = user2?.id ? Number(user2.id) : 0;
+			const minId = Math.min(id1, id2);
+			const maxId = Math.max(id1, id2);
+
+			// Search with BETWEEN condition
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					where: [
+						{
+							column: 'id',
+							operator: 'BETWEEN',
+							minValue: minId,
+							maxValue: maxId,
+						},
+					],
+					columns: ['id', 'name', 'email'],
+					limit: 100,
+				}),
+			});
+
+			expect(response.status).toBe(200);
+
+			const body = (await response.json()) as {
+				records: User[];
+				count: number;
+			};
+
+			// Should find users within the ID range
+			const filtered = body.records.filter((u) => {
+				const userId = Number(u.id);
+				return userId >= minId && userId <= maxId;
+			});
+			expect(filtered.length).toBeGreaterThanOrEqual(2);
+		});
+
+		it('rejects BETWEEN with missing minValue', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					where: [
+						{
+							column: 'id',
+							operator: 'BETWEEN',
+							maxValue: 100,
+						},
+					],
+				}),
+			});
+
+			expect(response.status).toBe(422);
+
+			const body = (await response.json()) as { message?: string };
+			expect(body.message).toContain('minValue and maxValue');
+		});
+
+		it('rejects BETWEEN with missing maxValue', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					where: [
+						{
+							column: 'id',
+							operator: 'BETWEEN',
+							minValue: 1,
+						},
+					],
+				}),
+			});
+
+			expect(response.status).toBe(422);
+
+			const body = (await response.json()) as { message?: string };
+			expect(body.message).toContain('minValue and maxValue');
+		});
 	});
 
 	describe('where filtering integration tests with appendWhere', () => {
@@ -1916,6 +2020,108 @@ describe('SearchEndpoint (integration)', () => {
 			expect(query.where).toBeDefined();
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			expect((query.where as any)?.length).toBe(1);
+		});
+
+		it('creates where clause with BETWEEN operator', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						id: { column: 'id' },
+					};
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					where: [
+						{
+							column: 'id',
+							operator: 'BETWEEN',
+							minValue: 10,
+							maxValue: 100,
+						},
+					],
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			const query = await endpoint['getQuery'](request);
+
+			expect(query.where).toBeDefined();
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			expect((query.where as any)?.length).toBe(1);
+		});
+
+		it('rejects BETWEEN operator without minValue', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						id: { column: 'id' },
+					};
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					where: [
+						{
+							column: 'id',
+							operator: 'BETWEEN',
+							maxValue: 100,
+						},
+					],
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			try {
+				await endpoint['getQuery'](request);
+				fail('Expected UnprocessableEntityError');
+			}
+			catch (error) {
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const msg = (error as any).message;
+				expect(msg).toContain('minValue and maxValue');
+			}
+		});
+
+		it('rejects BETWEEN operator without maxValue', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						id: { column: 'id' },
+					};
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					where: [
+						{
+							column: 'id',
+							operator: 'BETWEEN',
+							minValue: 10,
+						},
+					],
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			try {
+				await endpoint['getQuery'](request);
+				fail('Expected UnprocessableEntityError');
+			}
+			catch (error) {
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const msg = (error as any).message;
+				expect(msg).toContain('minValue and maxValue');
+			}
 		});
 
 		it('creates where clause with multiple conditions', async () => {
