@@ -18,6 +18,16 @@ import {
 } from 'valsan';
 import { RiaoRouter } from '../../src/router';
 import { RiaoSearchEndpoint } from '../../src/endpoints/search-endpoint';
+import {
+	ListPostsEndpoint,
+	SearchPostsEndpoint,
+	ListCommentsEndpoint,
+	SearchCommentsEndpoint,
+	postsRepo,
+	commentsRepo,
+	Post,
+	Comment,
+} from '../../test/spec/endpoints/search-aggregation.endpoints';
 
 export interface User {
 	id: string;
@@ -157,6 +167,30 @@ class UsersRouter extends RiaoRouter<User> {
 	}
 }
 
+export class PostsRouter extends RiaoRouter<Post> {
+	override repo = postsRepo;
+	override path = '/posts';
+
+	protected override async routes(): Promise<ApiRoute[]> {
+		return [ListPostsEndpoint, SearchPostsEndpoint];
+	}
+}
+
+export class CommentsRouter extends RiaoRouter<Comment> {
+	override repo = commentsRepo;
+	override path = '/comments';
+
+	protected override async routes(): Promise<ApiRoute[]> {
+		return [ListCommentsEndpoint, SearchCommentsEndpoint];
+	}
+}
+
+class MainRouter extends RiaoRouter {
+	protected override async routes(): Promise<ApiRoute[]> {
+		return [UsersRouter, PostsRouter, CommentsRouter];
+	}
+}
+
 export class Server extends RestServer {
-	override router = UsersRouter;
+	override router = MainRouter;
 }

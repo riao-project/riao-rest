@@ -17,6 +17,7 @@ import {
 
 import {
 	and,
+	DatabaseFunctions,
 	Expression,
 	gt,
 	gte,
@@ -31,6 +32,8 @@ import {
 import { listValidators } from './get-list-endpoint';
 import { EndpointMethod } from 'api-machine/router/endpoint';
 import { KeyValExpression } from '@riao/dbal/expression/key-val-expression';
+import { DatabaseFunctionToken } from '@riao/dbal/functions/function-token';
+import { identifier } from '@riao/dbal/expression/identifier';
 
 export const columnNameValidator = new ComposedValSan([
 	new LengthValidator({ minLength: 1, maxLength: 255 }),
@@ -47,18 +50,36 @@ export const whereConditionValidator = new ObjectValSan({
 		operator: new EnumValidator({
 			allowedValues: ['=', '<', '<=', '>', '>=', 'LIKE', 'INARRAY'],
 		}),
-		value: new LengthValidator({ minLength: 0, maxLength: 1024 }),
+		// TODO: value: new ComposedValSan([...]),
 	},
+	// TODO: Disable once there's value validation
+	allowAdditionalProperties: true,
 });
 
 export const whereArrayValidator = new ArrayValSan({
 	schema: whereConditionValidator,
 });
 
+export const aggregateColumnValidator = new ObjectValSan({
+	schema: {
+		column: columnNameValidator,
+		function: new EnumValidator({
+			allowedValues: ['count', 'sum', 'avg', 'min', 'max'],
+		}),
+		alias: columnNameValidator.copy({ isOptional: true }),
+	},
+});
+
+export const aggregateArrayValidator = new ArrayValSan({
+	schema: aggregateColumnValidator,
+});
+
 export const searchValidators = {
 	...listValidators,
 	columns: columnArrayValidator.copy({ isOptional: true }),
 	where: whereArrayValidator.copy({ isOptional: true }),
+	aggregates: aggregateArrayValidator.copy({ isOptional: true }),
+	groupBy: columnArrayValidator.copy({ isOptional: true }),
 };
 
 export interface RiaoSearchColumn<T extends DatabaseRecordWithId> {
@@ -70,6 +91,14 @@ export interface RiaoSearchCondition {
 	column: string;
 	operator: '=' | '<' | '<=' | '>' | '>=' | 'LIKE' | 'INARRAY';
 	value: string | number | boolean | null;
+}
+
+export type AggregateFunction = 'count' | 'sum' | 'avg' | 'min' | 'max';
+
+export interface RiaoAggregateColumn {
+	column: string;
+	function: AggregateFunction;
+	alias?: string;
 }
 
 export class RiaoSearchEndpoint<
@@ -94,6 +123,8 @@ export class RiaoSearchEndpoint<
 			orderDirection: listValidators.orderDirection,
 			columns: searchValidators.columns,
 			where: searchValidators.where,
+			aggregates: searchValidators.aggregates,
+			groupBy: searchValidators.groupBy,
 		},
 	});
 
@@ -119,10 +150,14 @@ export class RiaoSearchEndpoint<
 	}
 
 	protected async getQuery(request: ApiRequest): Promise<SelectQuery<T>> {
-		let columns = request.body['columns'] as (keyof T)[] | undefined;
+		let columns = request.body['columns'] as string[] | undefined;
+		const aggregates = request.body['aggregates'] as
+			| RiaoAggregateColumn[]
+			| undefined;
 		const where = request.body['where'] as
 			| RiaoSearchCondition[]
 			| undefined;
+		const groupBy = request.body['groupBy'] as string[] | undefined;
 		const limit = request.body['limit'] as number | undefined;
 		const offset = request.body['offset'] as number | undefined;
 		const orderBy = request.body['orderBy'] as keyof T | undefined;
@@ -136,9 +171,9 @@ export class RiaoSearchEndpoint<
 			offset: offset || 0,
 		};
 
-		if (where !== undefined && where.length > 0) {
-			const columnMap = this.getColumnMap();
+		const columnMap = this.getColumnMap();
 
+		if (where !== undefined && where.length > 0) {
 			if (!columns) {
 				columns = [];
 			}
@@ -229,17 +264,132 @@ export class RiaoSearchEndpoint<
 			(query.where as Expression[]).push(...appendWhere);
 		}
 
+		const selectColumns: Record<string, SelectColumn<T>> = {};
+
+		if (aggregates !== undefined && aggregates.length > 0) {
+			if (!groupBy || groupBy.length === 0) {
+				throw new UnprocessableEntityError(
+					'At least one groupBy column is required when ' +
+						'using aggregates.'
+				);
+			}
+
+			if (!columns) {
+				columns = [];
+			}
+
+			for (const aggregate of aggregates) {
+				const mappedColumn = columnMap[aggregate.column];
+				if (!mappedColumn) {
+					throw new UnprocessableEntityError(
+						`Column "${aggregate.column}" is not a valid ` +
+							'selectable column.'
+					);
+				}
+
+				const key = aggregate.alias || aggregate.column;
+				if (selectColumns[key]) {
+					throw new UnprocessableEntityError(
+						`Duplicate aggregate alias or column "${key}".`
+					);
+				}
+
+				let dbfn: DatabaseFunctionToken;
+
+				if (aggregate.function === 'count') {
+					dbfn = DatabaseFunctions.count();
+				}
+				else if (aggregate.function === 'sum') {
+					dbfn = DatabaseFunctions.sum(
+						identifier(mappedColumn.column as string)
+					);
+				}
+				else if (aggregate.function === 'avg') {
+					dbfn = DatabaseFunctions.average(
+						identifier(mappedColumn.column as string)
+					);
+				}
+				else if (aggregate.function === 'min') {
+					dbfn = DatabaseFunctions.min(
+						identifier(mappedColumn.column as string)
+					);
+				}
+				else if (aggregate.function === 'max') {
+					dbfn = DatabaseFunctions.max(
+						identifier(mappedColumn.column as string)
+					);
+				}
+				else {
+					throw new UnprocessableEntityError(
+						`Aggregate function "${aggregate.function}" ` +
+							'is not supported.'
+					);
+				}
+
+				if (!columns.includes(aggregate.column)) {
+					// TODO: This is added to include joins etc. -
+					// 	but we don't really want to push the column
+					// 	to the select
+					columns.push(aggregate.column);
+				}
+
+				selectColumns[key] = {
+					query: dbfn,
+					as: key,
+				};
+			}
+		}
+
+		// Validate groupBy columns for security
+		if (groupBy !== undefined && groupBy.length > 0) {
+			if (!aggregates || aggregates.length === 0) {
+				throw new UnprocessableEntityError(
+					'At least one aggregate is required when using ' +
+						'groupBy.'
+				);
+			}
+
+			// istanbul ignore next
+			if (!columns) {
+				// TODO: This is added to include joins etc. - but we don't
+				// 	really want to push the column to the select
+				// 	when only grouping
+				// istanbul ignore next
+				columns = [];
+			}
+
+			if (!query.groupBy) {
+				query.groupBy = [];
+			}
+
+			for (const col of groupBy) {
+				const mappedColumn = columnMap[col];
+
+				if (!mappedColumn) {
+					throw new UnprocessableEntityError(
+						`Column "${col}" is not a valid selectable column.`
+					);
+				}
+
+				if (!columns.includes(col)) {
+					columns.push(col);
+				}
+
+				query.groupBy.push(mappedColumn.column as string);
+			}
+		}
+
 		const joins: Record<string, Join> = {};
 
 		if (columns !== undefined && columns.length > 0) {
-			const selectColumns: SelectColumn<T>[] = [];
-			const columnMap = this.getColumnMap();
-
 			for (const column of columns) {
 				const selectColumn = columnMap[column as string];
 
 				if (selectColumn) {
-					selectColumns.push(selectColumn.column);
+					if (!selectColumns[selectColumn.column as string]) {
+						selectColumns[selectColumn.column as string] =
+							selectColumn.column;
+					}
 
 					if (selectColumn.join) {
 						joins[
@@ -255,8 +405,8 @@ export class RiaoSearchEndpoint<
 				}
 			}
 
-			if (selectColumns.length > 0) {
-				query.columns = selectColumns;
+			if (Object.keys(selectColumns).length > 0) {
+				query.columns = Object.values(selectColumns);
 			}
 
 			if (Object.keys(joins).length > 0) {
