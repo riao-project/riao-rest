@@ -8,15 +8,28 @@ import { RiaoEndpoint, DatabaseRecordWithId } from './base-endpoint';
 import {
 	ArrayValSan,
 	ComposedValSan,
+	EnumValidator,
 	LengthValidator,
 	ObjectValSan,
 	PatternValidator,
 	StringToNumberValSan,
 } from 'valsan';
 
-import { Join, SelectColumn, SelectQuery } from '@riao/dbal';
+import {
+	and,
+	gt,
+	gte,
+	inArray,
+	Join,
+	like,
+	lt,
+	lte,
+	SelectColumn,
+	SelectQuery,
+} from '@riao/dbal';
 import { listValidators } from './get-list-endpoint';
 import { EndpointMethod } from 'api-machine/router/endpoint';
+import { KeyValExpression } from '@riao/dbal/expression/key-val-expression';
 
 export const columnNameValidator = new ComposedValSan([
 	new LengthValidator({ minLength: 1, maxLength: 255 }),
@@ -27,14 +40,35 @@ export const columnArrayValidator = new ArrayValSan({
 	schema: columnNameValidator,
 });
 
+export const whereConditionValidator = new ObjectValSan({
+	schema: {
+		column: columnNameValidator,
+		operator: new EnumValidator({
+			allowedValues: ['=', '<', '<=', '>', '>=', 'LIKE', 'INARRAY'],
+		}),
+		value: new LengthValidator({ minLength: 0, maxLength: 1024 }),
+	},
+});
+
+export const whereArrayValidator = new ArrayValSan({
+	schema: whereConditionValidator,
+});
+
 export const searchValidators = {
 	...listValidators,
 	columns: columnArrayValidator.copy({ isOptional: true }),
+	where: whereArrayValidator.copy({ isOptional: true }),
 };
 
 export interface RiaoSearchColumn<T extends DatabaseRecordWithId> {
 	column: SelectColumn<T> | string;
 	join?: Join;
+}
+
+export interface RiaoSearchCondition {
+	column: string;
+	operator: '=' | '<' | '<=' | '>' | '>=' | 'LIKE' | 'INARRAY';
+	value: string | number | boolean | null;
 }
 
 export class RiaoSearchEndpoint<
@@ -58,6 +92,7 @@ export class RiaoSearchEndpoint<
 			orderBy: listValidators.orderBy,
 			orderDirection: listValidators.orderDirection,
 			columns: searchValidators.columns,
+			where: searchValidators.where,
 		},
 	});
 
@@ -83,7 +118,10 @@ export class RiaoSearchEndpoint<
 	}
 
 	protected async getQuery(request: ApiRequest): Promise<SelectQuery<T>> {
-		const columns = request.body['columns'] as (keyof T)[] | undefined;
+		let columns = request.body['columns'] as (keyof T)[] | undefined;
+		const where = request.body['where'] as
+			| RiaoSearchCondition[]
+			| undefined;
 		const limit = request.body['limit'] as number | undefined;
 		const offset = request.body['offset'] as number | undefined;
 		const orderBy = request.body['orderBy'] as keyof T | undefined;
@@ -96,6 +134,86 @@ export class RiaoSearchEndpoint<
 			limit: limit || 1000,
 			offset: offset || 0,
 		};
+
+		if (where !== undefined && where.length > 0) {
+			const columnMap = this.getColumnMap();
+
+			if (!columns) {
+				columns = [];
+			}
+
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			query.where = [] as KeyValExpression<any>[];
+
+			for (const condition of where) {
+				if (!columns.includes(condition.column)) {
+					columns.push(condition.column);
+				}
+
+				if (query.where.length) {
+					query.where.push(and);
+				}
+
+				const mappedColumn = columnMap[condition.column];
+
+				if (!mappedColumn) {
+					throw new UnprocessableEntityError(
+						`Column "${condition.column}" is not a valid ` +
+							'filterable column.'
+					);
+				}
+
+				if (typeof mappedColumn.column !== 'string') {
+					throw new UnprocessableEntityError(
+						`Column "${condition.column}" is not a valid ` +
+							'filterable column.'
+					);
+				}
+
+				if (condition.operator === '<') {
+					query.where.push(<KeyValExpression<T>>{
+						[mappedColumn.column]: lt(condition.value),
+					});
+				}
+				else if (condition.operator === '<=') {
+					query.where.push(<KeyValExpression<T>>{
+						[mappedColumn.column]: lte(condition.value),
+					});
+				}
+				else if (condition.operator === '=') {
+					query.where.push(<KeyValExpression<T>>{
+						[mappedColumn.column]: condition.value,
+					});
+				}
+				else if (condition.operator === '>') {
+					query.where.push(<KeyValExpression<T>>{
+						[mappedColumn.column]: gt(condition.value),
+					});
+				}
+				else if (condition.operator === '>=') {
+					query.where.push(<KeyValExpression<T>>{
+						[mappedColumn.column]: gte(condition.value),
+					});
+				}
+				else if (condition.operator === 'LIKE') {
+					query.where.push(<KeyValExpression<T>>{
+						[mappedColumn.column]: like(condition.value as string),
+					});
+				}
+				else if (condition.operator === 'INARRAY') {
+					// Parse comma-separated values or array of values
+					const values = Array.isArray(condition.value)
+						? condition.value
+						: String(condition.value)
+							.split(',')
+							.map((v) => v.trim());
+
+					query.where.push(<KeyValExpression<T>>{
+						[mappedColumn.column]: inArray(values),
+					});
+				}
+			}
+		}
 
 		const joins: Record<string, Join> = {};
 

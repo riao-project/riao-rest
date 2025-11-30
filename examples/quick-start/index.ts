@@ -82,7 +82,16 @@ class CreateUserEndpoint extends RiaoCreateEndpoint<User> {
 }
 
 class ListUsersEndpoint extends RiaoGetListEndpoint<User> {}
-class SearchUsersEndpoint extends RiaoSearchEndpoint<User> {}
+
+class SearchUsersEndpoint extends RiaoSearchEndpoint<User> {
+	override getColumnMap() {
+		return {
+			id: { column: 'id' },
+			name: { column: 'name' },
+			email: { column: 'email' },
+		};
+	}
+}
 
 class GetUserEndpoint extends RiaoGetOneEndpoint<User> {
 	override paramsExample = {

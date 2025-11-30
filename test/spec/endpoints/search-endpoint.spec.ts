@@ -2,6 +2,7 @@ import 'jasmine';
 import { env } from '../../env';
 import { repo, User } from '../../../examples/quick-start';
 import { RiaoSearchEndpoint } from '../../../src/endpoints';
+import { and, like } from '@riao/dbal';
 
 describe('SearchEndpoint (integration)', () => {
 	beforeAll(async () => {
@@ -231,11 +232,11 @@ describe('SearchEndpoint (integration)', () => {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
-					columns: ['id', 'name', 'email'],
+					columns: ['nonexistent_column'],
 				}),
 			});
 
-			// Throws UnprocessableEntityError since getColumnMap is empty
+			// Throws UnprocessableEntityError since column not in columnMap
 			expect(response.status).toBe(422);
 
 			const body = (await response.json()) as { message?: string };
@@ -309,32 +310,32 @@ describe('SearchEndpoint (integration)', () => {
 			expect(response.status).toBe(422);
 		});
 
-		it('rejects valid column format (not in map)', async () => {
+		it('rejects column not in map', async () => {
 			const url = `${env.API_URL}/users/search`;
 
 			const response = await fetch(url, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
-					columns: ['id', 'user_profile', 'profile.name'],
+					columns: ['nonexistent'],
 				}),
 			});
 
-			// Returns 422 since columns not in empty columnMap
+			// Returns 422 since column not in columnMap
 			expect(response.status).toBe(422);
 
 			const body = (await response.json()) as { message?: string };
 			expect(body.message).toContain('not a valid selectable column');
 		});
 
-		it('rejects multiple columns with other params', async () => {
+		it('rejects multiple columns with invalid column', async () => {
 			const url = `${env.API_URL}/users/search`;
 
 			const response = await fetch(url, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
-					columns: ['id', 'name'],
+					columns: ['id', 'nonexistent'],
 					limit: 5,
 					offset: 0,
 					orderBy: 'name',
@@ -342,7 +343,7 @@ describe('SearchEndpoint (integration)', () => {
 				}),
 			});
 
-			// Throws error since columns not in columnMap
+			// Throws error since nonexistent column not in columnMap
 			expect(response.status).toBe(422);
 
 			const body = (await response.json()) as { message?: string };
@@ -480,6 +481,358 @@ describe('SearchEndpoint (integration)', () => {
 
 			// Count should match total
 			expect(limitedRecords.count).toBe(allRecords.count);
+		});
+	});
+
+	describe('where parameter (filtering)', () => {
+		it('rejects `where` with column not in columnMap', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					where: [
+						{
+							column: 'nonexistent',
+							operator: '=',
+							value: 'John',
+						},
+					],
+				}),
+			});
+
+			// Throws UnprocessableEntityError since column not in columnMap
+			expect(response.status).toBe(422);
+
+			const body = (await response.json()) as { message?: string };
+			expect(body.message).toContain('not a valid filterable column');
+		});
+
+		it('rejects `where` with invalid operator', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					where: [
+						{
+							column: 'name',
+							operator: 'INVALID_OP',
+							value: 'John',
+						},
+					],
+				}),
+			});
+
+			// Validation error returns 422
+			expect(response.status).toBe(422);
+		});
+
+		it('rejects `where` with invalid column format', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					where: [
+						{
+							column: 'id; DROP TABLE users;',
+							operator: '=',
+							value: 'John',
+						},
+					],
+				}),
+			});
+
+			// Validation error returns 422
+			expect(response.status).toBe(422);
+		});
+
+		it('accepts empty `where` array', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					where: [],
+				}),
+			});
+
+			expect(response.status).toBe(200);
+
+			const body = (await response.json()) as {
+				records: User[];
+				count: number;
+			};
+			expect(Array.isArray(body.records)).toBeTrue();
+		});
+
+		it('rejects `where` with empty column name', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					where: [
+						{
+							column: '',
+							operator: '=',
+							value: 'John',
+						},
+					],
+				}),
+			});
+
+			// Validation error returns 422
+			expect(response.status).toBe(422);
+		});
+
+		it('rejects `where` with column exceeding max length', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			const longColumn = 'a'.repeat(256);
+
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					where: [
+						{
+							column: longColumn,
+							operator: '=',
+							value: 'John',
+						},
+					],
+				}),
+			});
+
+			// Validation error returns 422
+			expect(response.status).toBe(422);
+		});
+
+		it('rejects `where` with value exceeding max length', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			const longValue = 'a'.repeat(1025);
+
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					where: [
+						{
+							column: 'name',
+							operator: '=',
+							value: longValue,
+						},
+					],
+				}),
+			});
+
+			// Validation error returns 422
+			expect(response.status).toBe(422);
+		});
+	});
+
+	describe('where filtering integration tests', () => {
+		it('filters records by equality condition', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			// Create test users with specific names
+			const timestamp = Date.now();
+			const targetName = `Filter Test User ${timestamp}`;
+
+			await repo.insertOne({
+				record: {
+					name: targetName,
+					email: `target+${timestamp}@example.com`,
+				},
+			});
+
+			// Search with where clause for the target name
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					where: [
+						{
+							column: 'name',
+							operator: '=',
+							value: targetName,
+						},
+					],
+					columns: ['id', 'name', 'email'],
+					limit: 100,
+				}),
+			});
+
+			expect(response.status).toBe(200);
+
+			const body = (await response.json()) as {
+				records: User[];
+				count: number;
+			};
+
+			// Should find the target user
+			const filtered = body.records.filter((u) => u.name === targetName);
+			expect(filtered.length).toBeGreaterThanOrEqual(1);
+		});
+
+		it('filters records by LIKE condition', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			// Create test users with specific email patterns
+			const timestamp = Date.now();
+			const matchEmail = `liketest+${timestamp}@example.com`;
+
+			await repo.insertOne({
+				record: {
+					name: `Like Test User ${timestamp}`,
+					email: matchEmail,
+				},
+			});
+
+			// Search with LIKE condition
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					where: [
+						{
+							column: 'email',
+							operator: 'LIKE',
+							value: `%liketest+${timestamp}%`,
+						},
+					],
+					columns: ['id', 'name', 'email'],
+					limit: 100,
+				}),
+			});
+
+			expect(response.status).toBe(200);
+
+			const body = (await response.json()) as {
+				records: User[];
+				count: number;
+			};
+
+			// Should return matching records
+			const likeMatches = body.records.filter((u) =>
+				u.email.includes(`liketest+${timestamp}`)
+			);
+			expect(likeMatches.length).toBeGreaterThanOrEqual(1);
+		});
+
+		it('filters with multiple WHERE conditions', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			// Create test users
+			const timestamp = Date.now();
+			const targetName = `Multi Filter ${timestamp}`;
+			const targetEmail = `multi+${timestamp}@example.com`;
+
+			const user = await repo.insertOne({
+				record: {
+					name: targetName,
+					email: targetEmail,
+				},
+			});
+
+			// Search with multiple conditions
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					where: [
+						{
+							column: 'name',
+							operator: '=',
+							value: targetName,
+						},
+						{
+							column: 'email',
+							operator: '=',
+							value: targetEmail,
+						},
+					],
+					columns: ['id', 'name', 'email'],
+					limit: 100,
+				}),
+			});
+
+			expect(response.status).toBe(200);
+
+			const body = (await response.json()) as {
+				records: User[];
+				count: number;
+			};
+
+			// Should find the user matching both conditions
+			const filtered = body.records.filter(
+				(u) => u.name === targetName && u.email === targetEmail
+			);
+			expect(filtered.length).toBeGreaterThanOrEqual(1);
+			if (user?.id) {
+				expect(filtered.some((u) => u.id === user.id)).toBeTrue();
+			}
+		});
+
+		it('filters with INARRAY WHERE condition', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			// Create test users with specific IDs to filter
+			const timestamp = Date.now();
+			const user1 = await repo.insertOne({
+				record: {
+					name: `InArray User 1 ${timestamp}`,
+					email: `inarray1+${timestamp}@example.com`,
+				},
+			});
+
+			const user2 = await repo.insertOne({
+				record: {
+					name: `InArray User 2 ${timestamp}`,
+					email: `inarray2+${timestamp}@example.com`,
+				},
+			});
+
+			// Get user IDs to use in INARRAY filter
+			const ids = [user1?.id, user2?.id].filter(Boolean).join(',');
+
+			// Search with INARRAY condition
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					where: [
+						{
+							column: 'id',
+							operator: 'INARRAY',
+							value: ids,
+						},
+					],
+					columns: ['id', 'name', 'email'],
+					limit: 100,
+				}),
+			});
+
+			expect(response.status).toBe(200);
+
+			const body = (await response.json()) as {
+				records: User[];
+				count: number;
+			};
+
+			// Should find both users
+			const filtered = body.records.filter(
+				(u) => u.id === user1?.id || u.id === user2?.id
+			);
+			expect(filtered.length).toBeGreaterThanOrEqual(2);
 		});
 	});
 
@@ -701,6 +1054,607 @@ describe('SearchEndpoint (integration)', () => {
 
 			expect(query.join).toBeDefined();
 			expect(query.join?.length).toBe(1);
+		});
+
+		it('creates where clause with single equality condition', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						name: { column: 'name' },
+					};
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					where: [
+						{
+							column: 'name',
+							operator: '=',
+							value: 'John',
+						},
+					],
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			const query = await endpoint['getQuery'](request);
+
+			expect(query.where).toBeDefined();
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			expect((query.where as any)?.length).toBe(1);
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			expect((query.where as any)?.[0]).toEqual({ name: 'John' });
+		});
+
+		it('creates where clause with less than operator', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						id: { column: 'id' },
+					};
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					where: [
+						{
+							column: 'id',
+							operator: '<',
+							value: 100,
+						},
+					],
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			const query = await endpoint['getQuery'](request);
+
+			expect(query.where).toBeDefined();
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			expect((query.where as any)?.length).toBe(1);
+		});
+
+		it('creates where with <= operator', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						id: { column: 'id' },
+					};
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					where: [
+						{
+							column: 'id',
+							operator: '<=',
+							value: 100,
+						},
+					],
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			const query = await endpoint['getQuery'](request);
+
+			expect(query.where).toBeDefined();
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			expect((query.where as any)?.length).toBe(1);
+		});
+
+		it('creates where clause with > operator', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						id: { column: 'id' },
+					};
+				}
+			}
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					where: [
+						{
+							column: 'id',
+							operator: '>',
+							value: 50,
+						},
+					],
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			const query = await endpoint['getQuery'](request);
+
+			expect(query.where).toBeDefined();
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			expect((query.where as any)?.length).toBe(1);
+		});
+
+		it('creates where with >= operator', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						id: { column: 'id' },
+					};
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					where: [
+						{
+							column: 'id',
+							operator: '>=',
+							value: 50,
+						},
+					],
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			const query = await endpoint['getQuery'](request);
+
+			expect(query.where).toBeDefined();
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			expect((query.where as any)?.length).toBe(1);
+		});
+		it('creates where clause with LIKE operator', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						name: { column: 'name' },
+					};
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					where: [
+						{
+							column: 'name',
+							operator: 'LIKE',
+							value: '%john%',
+						},
+					],
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			const query = await endpoint['getQuery'](request);
+
+			expect(query.where).toBeDefined();
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			expect((query.where as any)?.length).toBe(1);
+		});
+
+		it('creates where clause with multiple conditions', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						name: { column: 'name' },
+						email: { column: 'email' },
+					};
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					where: [
+						{
+							column: 'name',
+							operator: '=',
+							value: 'John',
+						},
+						{
+							column: 'email',
+							operator: 'LIKE',
+							value: '%example%',
+						},
+					],
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			const query = await endpoint['getQuery'](request);
+
+			expect(query.where).toBeDefined();
+			const where = query.where as unknown[];
+
+			expect(where.length).toBe(3);
+			expect(where[0]).toEqual({ name: 'John' });
+			expect(where[1]).toEqual(and);
+			expect(where[2]).toEqual({ email: like('%example%') });
+		});
+
+		it('adds where column to columns array if not present', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						name: { column: 'name' },
+					};
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					where: [
+						{
+							column: 'name',
+							operator: '=',
+							value: 'John',
+						},
+					],
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			const query = await endpoint['getQuery'](request);
+
+			expect(query.columns).toBeDefined();
+			expect(query.columns).toContain('name');
+		});
+
+		it('rejects where with column not in columnMap', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						id: { column: 'id' },
+					};
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					where: [
+						{
+							column: 'name',
+							operator: '=',
+							value: 'John',
+						},
+					],
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			try {
+				await endpoint['getQuery'](request);
+				fail('Expected UnprocessableEntityError');
+			}
+			catch (error) {
+				const errMsg = 'not a valid filterable column';
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				expect((error as any).message).toContain(errMsg);
+			}
+		});
+
+		it('rejects where with non-string mapped column', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						profile_name: {
+							column: {
+								table: 'profiles',
+								column: 'name',
+							},
+						},
+					};
+				}
+			}
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					where: [
+						{
+							column: 'profile_name',
+							operator: '=',
+							value: 'John',
+						},
+					],
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			try {
+				await endpoint['getQuery'](request);
+				fail('Expected UnprocessableEntityError');
+			}
+			catch (error) {
+				const errMsg = 'not a valid filterable column';
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				expect((error as any).message).toContain(errMsg);
+			}
+		});
+
+		it('handles where with joins', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						profile_name: {
+							column: 'profile.name',
+							join: {
+								table: 'profiles',
+								alias: 'profile',
+								on: 'profile.user_id = users.id',
+							},
+						},
+					};
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					where: [
+						{
+							column: 'profile_name',
+							operator: '=',
+							value: 'John',
+						},
+					],
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			const query = await endpoint['getQuery'](request);
+
+			expect(query.where).toBeDefined();
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			expect((query.where as any)?.length).toBe(1);
+			expect(query.join).toBeDefined();
+			expect(query.join?.length).toBe(1);
+		});
+
+		it('skips where clause when where array is empty', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						name: { column: 'name' },
+					};
+				}
+			}
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					where: [],
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			const query = await endpoint['getQuery'](request);
+
+			expect(query.where).toBeUndefined();
+		});
+
+		it('does not create where clause when where is undefined', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						name: { column: 'name' },
+					};
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			const query = await endpoint['getQuery'](request);
+
+			expect(query.where).toBeUndefined();
+		});
+
+		it('combines where and columns', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						id: { column: 'id' },
+						name: { column: 'name' },
+						email: { column: 'email' },
+					};
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					where: [
+						{
+							column: 'name',
+							operator: '=',
+							value: 'John',
+						},
+					],
+					columns: ['id', 'email'],
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			const query = await endpoint['getQuery'](request);
+
+			expect(query.where).toBeDefined();
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			expect((query.where as any)?.length).toBe(1);
+			expect(query.columns).toBeDefined();
+			expect(query.columns).toContain('id');
+			expect(query.columns).toContain('email');
+			expect(query.columns).toContain('name'); // Added from where
+		});
+
+		it('combines where, columns, and orderBy', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						id: { column: 'id' },
+						name: { column: 'name' },
+						email: { column: 'email' },
+					};
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					where: [
+						{
+							column: 'name',
+							operator: '=',
+							value: 'John',
+						},
+					],
+					columns: ['id', 'email'],
+					orderBy: 'id',
+					orderDirection: 'ASC',
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			const query = await endpoint['getQuery'](request);
+
+			expect(query.where).toBeDefined();
+			expect(query.columns).toBeDefined();
+			expect(query.orderBy).toBeDefined();
+			expect(query.orderBy).toEqual({ id: 'ASC' });
+		});
+
+		it('handles where with numeric values', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						id: { column: 'id' },
+					};
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					where: [
+						{
+							column: 'id',
+							operator: '>=',
+							value: 10,
+						},
+					],
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			const query = await endpoint['getQuery'](request);
+
+			expect(query.where).toBeDefined();
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			expect((query.where as any)?.length).toBe(1);
+		});
+
+		it('uses default empty getColumnMap', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				// eslint-disable-next-line max-len
+				// Do not override getColumnMap to test the default implementation
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const columnMap = endpoint['getColumnMap']();
+
+			expect(columnMap).toEqual({});
+		});
+
+		it('handles where with INARRAY operator', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						id: { column: 'id' },
+						name: { column: 'name' },
+					};
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					where: [
+						{
+							column: 'id',
+							operator: 'INARRAY',
+							value: '1,2,3',
+						},
+					],
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			const query = await endpoint['getQuery'](request);
+
+			expect(query.where).toBeDefined();
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			expect((query.where as any)?.length).toBe(1);
+			expect(query.columns).toContain('id');
+		});
+
+		// eslint-disable-next-line max-len
+		it('handles where with INARRAY operator and array value', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						id: { column: 'id' },
+						name: { column: 'name' },
+					};
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			// eslint-disable-next-line max-len
+			const request = {
+				body: {
+					where: [
+						{
+							column: 'id',
+							operator: 'INARRAY',
+							value: [1, 2, 3],
+						},
+					],
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			const query = await endpoint['getQuery'](request);
+
+			expect(query.where).toBeDefined();
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			expect((query.where as any)?.length).toBe(1);
+			expect(query.columns).toContain('id');
 		});
 	});
 });
