@@ -1,6 +1,7 @@
 import { RiaoGetListEndpoint } from '../../../src/endpoints';
 import { maindb } from '../../../database/main';
 import { RiaoSearchEndpoint } from '../../../src/endpoints/search-endpoint';
+import { identifier } from '@riao/dbal/expression/identifier';
 
 // Post model
 export interface Post {
@@ -41,19 +42,18 @@ export class ListCommentsEndpoint extends RiaoGetListEndpoint<Comment> {}
 export class SearchPostsEndpoint extends RiaoSearchEndpoint<Post> {
 	override getColumnMap() {
 		return {
-			id: { column: 'id' },
-			user_id: { column: 'user_id' },
-			title: { column: 'title' },
-			rating: { column: 'rating' },
-			created_at: { column: 'created_at' },
+			id: { column: 'posts.id' },
+			user_id: { column: 'posts.user_id' },
+			title: { column: 'posts.title' },
+			rating: { column: 'posts.rating' },
+			created_at: { column: 'posts.created_at' },
 			// User name join
-			user_name: {
+			'users.name': {
 				column: 'users.name',
 				join: {
 					table: 'users',
-					alias: 'users',
 					on: {
-						'posts.user_id': 'users.id',
+						'posts.user_id': identifier('users.id'),
 					},
 				},
 			},
@@ -64,31 +64,29 @@ export class SearchPostsEndpoint extends RiaoSearchEndpoint<Post> {
 export class SearchCommentsEndpoint extends RiaoSearchEndpoint<Comment> {
 	override getColumnMap() {
 		return {
-			id: { column: 'id' },
-			post_id: { column: 'post_id' },
-			user_id: { column: 'user_id' },
-			content: { column: 'content' },
-			rating: { column: 'rating' },
-			created_at: { column: 'created_at' },
+			id: { column: 'comments.id' },
+			post_id: { column: 'comments.post_id' },
+			user_id: { column: 'comments.user_id' },
+			content: { column: 'comments.content' },
+			rating: { column: 'comments.rating' },
+			created_at: { column: 'comments.created_at' },
 			// Post title join
-			post_title: {
+			'posts.title': {
 				column: 'posts.title',
 				join: {
 					table: 'posts',
-					alias: 'posts',
 					on: {
-						'comments.post_id': 'posts.id',
+						'comments.post_id': identifier('posts.id'),
 					},
 				},
 			},
 			// User name join
-			user_name: {
+			'users.name': {
 				column: 'users.name',
 				join: {
 					table: 'users',
-					alias: 'users',
 					on: {
-						'comments.user_id': 'users.id',
+						'comments.user_id': identifier('users.id'),
 					},
 				},
 			},
