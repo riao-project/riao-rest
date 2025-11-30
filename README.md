@@ -172,7 +172,15 @@ class ListEndpoint extends RiaoGetListEndpoint<YourModel> {}
 
 ### RiaoSearchEndpoint
 
-Retrieves records from the database with pagination & sorting.
+Powerful search and filtering with support for complex queries, aggregations, and advanced filtering operators.
+
+The search endpoint supports:
+- **Advanced filtering** with multiple operators (equality, comparison, LIKE, INARRAY, BETWEEN)
+- **Aggregations** (COUNT, SUM, AVG, MIN, MAX) with grouping
+- **Flexible column selection** with security through column mapping
+- **Sorting and pagination** for large result sets
+
+For detailed documentation on all query capabilities, see the [Search Endpoint Guide](docs/search-endpoint.md).
 
 ```typescript
 class SearchEndpoint extends RiaoSearchEndpoint<YourModel> {
@@ -197,6 +205,14 @@ class SearchEndpoint extends RiaoSearchEndpoint<YourModel> {
       ]),
     },
   });
+
+  protected override getColumnMap() {
+    return {
+      id: { column: 'users.id' },
+      name: { column: 'users.name' },
+      email: { column: 'users.email' },
+    };
+  }
 }
 ```
 
