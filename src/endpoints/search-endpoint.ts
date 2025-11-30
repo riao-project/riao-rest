@@ -1,19 +1,41 @@
-import { ApiNextFunction, ApiRequest, ApiResponse } from 'api-machine';
+import {
+	ApiNextFunction,
+	ApiRequest,
+	ApiResponse,
+	UnprocessableEntityError,
+} from 'api-machine';
 import { RiaoEndpoint, DatabaseRecordWithId } from './base-endpoint';
 import {
 	ArrayValSan,
 	ComposedValSan,
+	LengthValidator,
 	ObjectValSan,
+	PatternValidator,
 	StringToNumberValSan,
 } from 'valsan';
 
-import { SelectQuery } from '@riao/dbal';
+import { Join, SelectColumn, SelectQuery } from '@riao/dbal';
 import { listValidators } from './get-list-endpoint';
 import { EndpointMethod } from 'api-machine/router/endpoint';
 
+export const columnNameValidator = new ComposedValSan([
+	new LengthValidator({ minLength: 1, maxLength: 255 }),
+	new PatternValidator({ pattern: /^[a-zA-Z0-9_.]+$/ }),
+]);
+
+export const columnArrayValidator = new ArrayValSan({
+	schema: columnNameValidator,
+});
+
 export const searchValidators = {
 	...listValidators,
+	columns: columnArrayValidator.copy({ isOptional: true }),
 };
+
+export interface RiaoSearchColumn<T extends DatabaseRecordWithId> {
+	column: SelectColumn<T> | string;
+	join?: Join;
+}
 
 export class RiaoSearchEndpoint<
 	T extends DatabaseRecordWithId,
@@ -35,6 +57,7 @@ export class RiaoSearchEndpoint<
 			offset: listValidators.offset,
 			orderBy: listValidators.orderBy,
 			orderDirection: listValidators.orderDirection,
+			columns: searchValidators.columns,
 		},
 	});
 
@@ -55,7 +78,12 @@ export class RiaoSearchEndpoint<
 		},
 	});
 
+	protected getColumnMap(): Record<string, RiaoSearchColumn<T>> {
+		return {};
+	}
+
 	protected async getQuery(request: ApiRequest): Promise<SelectQuery<T>> {
+		const columns = request.body['columns'] as (keyof T)[] | undefined;
 		const limit = request.body['limit'] as number | undefined;
 		const offset = request.body['offset'] as number | undefined;
 		const orderBy = request.body['orderBy'] as keyof T | undefined;
@@ -68,6 +96,41 @@ export class RiaoSearchEndpoint<
 			limit: limit || 1000,
 			offset: offset || 0,
 		};
+
+		const joins: Record<string, Join> = {};
+
+		if (columns !== undefined && columns.length > 0) {
+			const selectColumns: SelectColumn<T>[] = [];
+			const columnMap = this.getColumnMap();
+
+			for (const column of columns) {
+				const selectColumn = columnMap[column as string];
+
+				if (selectColumn) {
+					selectColumns.push(selectColumn.column);
+
+					if (selectColumn.join) {
+						joins[
+							selectColumn.join.alias || selectColumn.join.table
+						] = selectColumn.join;
+					}
+				}
+				else {
+					throw new UnprocessableEntityError(
+						`Column "${String(column)}" is not a valid ` +
+							'selectable column.'
+					);
+				}
+			}
+
+			if (selectColumns.length > 0) {
+				query.columns = selectColumns;
+			}
+
+			if (Object.keys(joins).length > 0) {
+				query.join = Object.values(joins);
+			}
+		}
 
 		if (orderBy !== undefined && orderDirection !== undefined) {
 			query.orderBy = { [orderBy]: orderDirection } as Partial<
