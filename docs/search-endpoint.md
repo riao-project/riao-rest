@@ -13,6 +13,9 @@ The `RiaoSearchEndpoint` provides powerful query capabilities for searching, fil
 - [Ordering Parameter](#ordering-parameter)
 - [Pagination](#pagination)
 - [Column Mapping](#column-mapping)
+  - [Basic Mapping](#basic-mapping)
+  - [With Table Joins](#with-table-joins)
+  - [With Multiple Table Joins (Array Joins)](#with-multiple-table-joins-array-joins)
 - [Response Format](#response-format)
 - [Complete Examples](#complete-examples)
 
@@ -57,14 +60,24 @@ The search endpoint accepts POST requests with the following structure:
 		}
 	],
 	"groupBy": ["email"],
-	"orderBy": "id",
-	"orderDirection": "DESC",
+	"order": [
+		{
+			"column": "name",
+			"direction": "ASC"
+		},
+		{
+			"column": "email",
+			"direction": "DESC"
+		}
+	],
 	"limit": 50,
 	"offset": 0
 }
 ```
 
 All parameters are optional. If not provided, defaults will be applied.
+
+**Note:** You can use either the `order` parameter (for multiple columns) or the legacy `orderBy`/`orderDirection` parameters (for single column). If both are provided, `order` takes precedence.
 
 ## Columns Parameter
 
@@ -340,13 +353,87 @@ When grouping, you typically want to include the groupBy columns in your results
 
 ## Ordering Parameter
 
-Control the sort order of results using `orderBy` and `orderDirection`.
+Control the sort order of results using either the `order` parameter for multiple sort columns, or the legacy `orderBy` and `orderDirection` parameters for single-column sorting.
+
+### Multiple Order-By (Recommended)
+
+Use the `order` parameter to sort by multiple columns with different directions.
+
+**Type:** `RiaoOrderItem[]`
+
+Each order item has:
+- `column` (string, required): Column to sort by
+- `direction` ('ASC' | 'DESC', optional): Sort direction. Defaults to 'ASC' if not specified
+
+#### Example: Sort by Multiple Columns
+
+```json
+{
+	"order": [
+		{
+			"column": "status",
+			"direction": "ASC"
+		},
+		{
+			"column": "createdAt",
+			"direction": "DESC"
+		}
+	]
+}
+```
+
+This returns results sorted first by status (ascending), then by creation date (descending) within each status group.
+
+#### Example: Three-Column Sort
+
+```json
+{
+	"order": [
+		{
+			"column": "department",
+			"direction": "ASC"
+		},
+		{
+			"column": "salary",
+			"direction": "DESC"
+		},
+		{
+			"column": "name",
+			"direction": "ASC"
+		}
+	]
+}
+```
+
+This returns results sorted by department, then by salary (highest first), then by name alphabetically.
+
+#### Example: Default Direction
+
+```json
+{
+	"order": [
+		{
+			"column": "priority"
+		},
+		{
+			"column": "name",
+			"direction": "DESC"
+		}
+	]
+}
+```
+
+The priority column defaults to 'ASC' since direction is not specified.
+
+### Legacy Single Column Ordering
+
+For backward compatibility, you can still use `orderBy` and `orderDirection` for single-column sorting.
 
 **Types:**
 - `orderBy` (keyof T, optional): Column to sort by
 - `orderDirection` ('ASC' | 'DESC', optional): Sort direction, must be used with orderBy
 
-### Example
+#### Example
 
 ```json
 {
@@ -367,6 +454,10 @@ Sort by creation date in descending order (newest first).
 Sort by name alphabetically.
 
 **Note:** Both `orderBy` and `orderDirection` must be provided for sorting to work. If only one is provided, sorting is ignored.
+
+### Precedence
+
+If both `order` and `orderBy`/`orderDirection` are provided, `order` takes precedence and `orderBy`/`orderDirection` are ignored.
 
 ## Pagination
 
@@ -457,6 +548,118 @@ class OrderSearchEndpoint extends RiaoSearchEndpoint<Order> {
 	}
 }
 ```
+
+### With Multiple Table Joins (Array Joins)
+
+For querying data through multiple related tables, you can specify an array of joins. This allows you to traverse multiple relationships in a single column definition.
+
+#### Single Join in Array
+
+```typescript
+class CommentSearchEndpoint extends RiaoSearchEndpoint<Comment> {
+	protected override getColumnMap() {
+		return {
+			id: { column: 'comments.id' },
+			content: { column: 'comments.content' },
+			// Access post title through join array
+			postTitle: {
+				column: 'posts.title',
+				join: [
+					{
+						table: 'posts',
+						joinType: 'INNER',
+						on: {
+							'comments.post_id': identifier('posts.id')
+						}
+					}
+				]
+			},
+		};
+	}
+}
+```
+
+#### Multiple Joins in Array (Traversing Multiple Tables)
+
+For complex relationships across multiple tables, pass an array of joins. They will be executed in order:
+
+```typescript
+class CommentSearchEndpoint extends RiaoSearchEndpoint<Comment> {
+	protected override getColumnMap() {
+		return {
+			id: { column: 'comments.id' },
+			content: { column: 'comments.content' },
+			// Traverse: comments -> posts -> users (get post author email)
+			postAuthorEmail: {
+				column: 'users.email',
+				join: [
+					{
+						table: 'posts',
+						alias: 'posts',
+						joinType: 'INNER',
+						on: {
+							'comments.post_id': identifier('posts.id')
+						}
+					},
+					{
+						table: 'users',
+						alias: 'post_authors',
+						joinType: 'INNER',
+						on: {
+							'posts.user_id': identifier('post_authors.id')
+						}
+					}
+				]
+			},
+			// Traverse: comments -> users (get comment author email)
+			commentAuthorEmail: {
+				column: 'users.email',
+				join: [
+					{
+						table: 'users',
+						alias: 'comment_authors',
+						joinType: 'INNER',
+						on: {
+							'comments.user_id': identifier('comment_authors.id')
+						}
+					}
+				]
+			},
+		};
+	}
+}
+```
+
+**Key Points:**
+- Joins are executed in the order specified in the array
+- Use `alias` to distinguish joins to the same table with different purposes
+- All joins are automatically deduplicated by alias/table name
+- Mixing single joins and array joins works seamlessly
+
+#### Query Example with Array Joins
+
+```json
+{
+	"columns": ["id", "content", "postAuthorEmail", "commentAuthorEmail"],
+	"where": [
+		{
+			"column": "postAuthorEmail",
+			"operator": "=",
+			"value": "author@example.com"
+		}
+	],
+	"orderBy": "id",
+	"orderDirection": "DESC",
+	"limit": 25
+}
+```
+
+This query:
+1. Joins comments to posts based on `comments.post_id`
+2. Joins posts to users (as post_authors) based on `posts.user_id`
+3. Joins comments to users (as comment_authors) based on `comments.user_id`
+4. Filters to only posts by "author@example.com"
+5. Returns the requested columns sorted by ID
 
 ## Response Format
 
@@ -632,6 +835,46 @@ Find products in price range with specific categories:
 	"limit": 30
 }
 ```
+
+### Example 7: Multiple Column Sorting
+
+Sort users by multiple criteria - status first, then by join date (newest first), then by name:
+
+```json
+{
+	"columns": ["id", "name", "email", "status", "joinedDate"],
+	"order": [
+		{
+			"column": "status",
+			"direction": "ASC"
+		},
+		{
+			"column": "joinedDate",
+			"direction": "DESC"
+		},
+		{
+			"column": "name",
+			"direction": "ASC"
+		}
+	],
+	"limit": 50
+}
+```
+
+Response:
+
+```json
+{
+	"records": [
+		{ "id": 5, "name": "Alice Smith", "email": "alice@example.com", "status": "active", "joinedDate": "2024-11-15" },
+		{ "id": 8, "name": "Bob Johnson", "email": "bob@example.com", "status": "active", "joinedDate": "2024-10-20" },
+		{ "id": 12, "name": "Carol Davis", "email": "carol@example.com", "status": "inactive", "joinedDate": "2024-09-10" }
+	],
+	"count": 1250
+}
+```
+
+Notice how results are first grouped by status (active before inactive), then within each status sorted by join date (newest first), and finally by name alphabetically.
 
 ## Error Handling
 
