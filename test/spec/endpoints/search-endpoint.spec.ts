@@ -4,6 +4,16 @@ import { repo, User } from '../../../examples/quick-start';
 import { RiaoSearchEndpoint } from '../../../src/endpoints';
 import { and, like } from '@riao/dbal';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function findColumn(
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	columns: any[] | undefined,
+	columnName: string
+) {
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	return columns?.find((c: any) => (c.as || c) === columnName);
+}
+
 describe('SearchEndpoint (integration)', () => {
 	beforeAll(async () => {
 		// Ensure there is at least one user in the database
@@ -1639,8 +1649,8 @@ describe('SearchEndpoint (integration)', () => {
 			const query = await endpoint['getQuery'](request);
 
 			expect(query.columns).toBeDefined();
-			expect(query.columns).toContain('id');
-			expect(query.columns).toContain('name');
+			expect(findColumn(query.columns, 'id')).toBeDefined();
+			expect(findColumn(query.columns, 'name')).toBeDefined();
 		});
 
 		it('includes joins in query when join is defined', async () => {
@@ -2643,9 +2653,10 @@ describe('SearchEndpoint (integration)', () => {
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			expect((query.where as any)?.length).toBe(1);
 			expect(query.columns).toBeDefined();
-			expect(query.columns).toContain('id');
-			expect(query.columns).toContain('email');
-			expect(query.columns).toContain('name'); // Added from where
+			expect(findColumn(query.columns, 'id')).toBeDefined();
+			expect(findColumn(query.columns, 'email')).toBeDefined();
+			// Added from where
+			expect(findColumn(query.columns, 'name')).toBeDefined();
 		});
 
 		it('combines where, columns, and orderBy', async () => {
@@ -2759,7 +2770,7 @@ describe('SearchEndpoint (integration)', () => {
 			expect(query.where).toBeDefined();
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			expect((query.where as any)?.length).toBe(1);
-			expect(query.columns).toContain('id');
+			expect(findColumn(query.columns, 'id')).toBeDefined();
 		});
 
 		// eslint-disable-next-line max-len
@@ -2795,7 +2806,7 @@ describe('SearchEndpoint (integration)', () => {
 			expect(query.where).toBeDefined();
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			expect((query.where as any)?.length).toBe(1);
-			expect(query.columns).toContain('id');
+			expect(findColumn(query.columns, 'id')).toBeDefined();
 		});
 
 		// eslint-disable-next-line max-len
@@ -3139,7 +3150,7 @@ describe('SearchEndpoint (integration)', () => {
 			const query = await endpoint['getQuery'](request);
 
 			expect(query.columns).toBeDefined();
-			expect(query.columns).toContain('name');
+			expect(findColumn(query.columns, 'name')).toBeDefined();
 			// Aggregate is processed into a complex object, check it exists
 			expect(query.columns?.length).toBe(2);
 		});
@@ -3178,7 +3189,7 @@ describe('SearchEndpoint (integration)', () => {
 			const query = await endpoint['getQuery'](request);
 
 			expect(query.columns).toBeDefined();
-			expect(query.columns).toContain('id');
+			expect(findColumn(query.columns, 'id')).toBeDefined();
 		});
 
 		it('uses custom alias for aggregate', async () => {
@@ -3241,7 +3252,7 @@ describe('SearchEndpoint (integration)', () => {
 			const query = await endpoint['getQuery'](request);
 
 			expect(query.columns).toBeDefined();
-			expect(query.columns).toContain('name');
+			expect(findColumn(query.columns, 'name')).toBeDefined();
 		});
 
 		it('rejects groupBy with column not in columnMap', async () => {
@@ -3310,8 +3321,8 @@ describe('SearchEndpoint (integration)', () => {
 			const query = await endpoint['getQuery'](request);
 
 			expect(query.columns).toBeDefined();
-			expect(query.columns).toContain('name');
-			expect(query.columns).toContain('id');
+			expect(findColumn(query.columns, 'name')).toBeDefined();
+			expect(findColumn(query.columns, 'id')).toBeDefined();
 		});
 
 		it('empty aggregates array does not apply aggregation', async () => {
@@ -3337,8 +3348,8 @@ describe('SearchEndpoint (integration)', () => {
 			const query = await endpoint['getQuery'](request);
 
 			expect(query.columns).toBeDefined();
-			expect(query.columns).toContain('id');
-			expect(query.columns).toContain('name');
+			expect(findColumn(query.columns, 'id')).toBeDefined();
+			expect(findColumn(query.columns, 'name')).toBeDefined();
 		});
 
 		it('empty groupBy array does not apply grouping', async () => {
@@ -3364,8 +3375,8 @@ describe('SearchEndpoint (integration)', () => {
 			const query = await endpoint['getQuery'](request);
 
 			expect(query.columns).toBeDefined();
-			expect(query.columns).toContain('id');
-			expect(query.columns).toContain('name');
+			expect(findColumn(query.columns, 'id')).toBeDefined();
+			expect(findColumn(query.columns, 'name')).toBeDefined();
 		});
 
 		it('aggregate with where clause', async () => {
