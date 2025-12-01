@@ -13,6 +13,9 @@ The `RiaoSearchEndpoint` provides powerful query capabilities for searching, fil
 - [Ordering Parameter](#ordering-parameter)
 - [Pagination](#pagination)
 - [Column Mapping](#column-mapping)
+  - [Basic Mapping](#basic-mapping)
+  - [With Table Joins](#with-table-joins)
+  - [With Multiple Table Joins (Array Joins)](#with-multiple-table-joins-array-joins)
 - [Response Format](#response-format)
 - [Complete Examples](#complete-examples)
 
@@ -457,6 +460,118 @@ class OrderSearchEndpoint extends RiaoSearchEndpoint<Order> {
 	}
 }
 ```
+
+### With Multiple Table Joins (Array Joins)
+
+For querying data through multiple related tables, you can specify an array of joins. This allows you to traverse multiple relationships in a single column definition.
+
+#### Single Join in Array
+
+```typescript
+class CommentSearchEndpoint extends RiaoSearchEndpoint<Comment> {
+	protected override getColumnMap() {
+		return {
+			id: { column: 'comments.id' },
+			content: { column: 'comments.content' },
+			// Access post title through join array
+			postTitle: {
+				column: 'posts.title',
+				join: [
+					{
+						table: 'posts',
+						joinType: 'INNER',
+						on: {
+							'comments.post_id': identifier('posts.id')
+						}
+					}
+				]
+			},
+		};
+	}
+}
+```
+
+#### Multiple Joins in Array (Traversing Multiple Tables)
+
+For complex relationships across multiple tables, pass an array of joins. They will be executed in order:
+
+```typescript
+class CommentSearchEndpoint extends RiaoSearchEndpoint<Comment> {
+	protected override getColumnMap() {
+		return {
+			id: { column: 'comments.id' },
+			content: { column: 'comments.content' },
+			// Traverse: comments -> posts -> users (get post author email)
+			postAuthorEmail: {
+				column: 'users.email',
+				join: [
+					{
+						table: 'posts',
+						alias: 'posts',
+						joinType: 'INNER',
+						on: {
+							'comments.post_id': identifier('posts.id')
+						}
+					},
+					{
+						table: 'users',
+						alias: 'post_authors',
+						joinType: 'INNER',
+						on: {
+							'posts.user_id': identifier('post_authors.id')
+						}
+					}
+				]
+			},
+			// Traverse: comments -> users (get comment author email)
+			commentAuthorEmail: {
+				column: 'users.email',
+				join: [
+					{
+						table: 'users',
+						alias: 'comment_authors',
+						joinType: 'INNER',
+						on: {
+							'comments.user_id': identifier('comment_authors.id')
+						}
+					}
+				]
+			},
+		};
+	}
+}
+```
+
+**Key Points:**
+- Joins are executed in the order specified in the array
+- Use `alias` to distinguish joins to the same table with different purposes
+- All joins are automatically deduplicated by alias/table name
+- Mixing single joins and array joins works seamlessly
+
+#### Query Example with Array Joins
+
+```json
+{
+	"columns": ["id", "content", "postAuthorEmail", "commentAuthorEmail"],
+	"where": [
+		{
+			"column": "postAuthorEmail",
+			"operator": "=",
+			"value": "author@example.com"
+		}
+	],
+	"orderBy": "id",
+	"orderDirection": "DESC",
+	"limit": 25
+}
+```
+
+This query:
+1. Joins comments to posts based on `comments.post_id`
+2. Joins posts to users (as post_authors) based on `posts.user_id`
+3. Joins comments to users (as comment_authors) based on `comments.user_id`
+4. Filters to only posts by "author@example.com"
+5. Returns the requested columns sorted by ID
 
 ## Response Format
 

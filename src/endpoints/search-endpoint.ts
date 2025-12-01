@@ -94,10 +94,9 @@ export const searchValidators = {
 
 export interface RiaoSearchColumn<T extends DatabaseRecordWithId> {
 	column: SelectColumn<T> | string;
-	// TODO: May need to take array of joins for complex relations
-	// 	Currently, this relies on the user selecting all necessary
-	// 	other tables in a chain to satisfy joins
-	join?: Join;
+	// Supports both single joins and arrays of joins for complex
+	// multi-table relations
+	join?: Join | Join[];
 }
 
 export interface RiaoSearchCondition {
@@ -199,8 +198,14 @@ export class RiaoSearchEndpoint<
 			}
 
 			if (mappedColumn.join) {
-				joins[mappedColumn.join.alias || mappedColumn.join.table] =
-					mappedColumn.join;
+				// Handle both single join and array of joins
+				const joinList = Array.isArray(mappedColumn.join)
+					? mappedColumn.join
+					: [mappedColumn.join];
+
+				for (const join of joinList) {
+					joins[join.alias || join.table] = join;
+				}
 			}
 
 			return mappedColumn;

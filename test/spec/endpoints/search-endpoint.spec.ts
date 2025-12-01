@@ -1836,6 +1836,292 @@ describe('SearchEndpoint (integration)', () => {
 			expect(query.join?.length).toBe(1);
 		});
 
+		it('includes single join from array in query', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						post_title: {
+							column: 'posts.title',
+							join: [
+								{
+									table: 'posts',
+									alias: 'posts',
+									on: 'posts.user_id = users.id',
+								},
+							],
+						},
+					};
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					columns: ['post_title'],
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			const query = await endpoint['getQuery'](request);
+
+			expect(query.join).toBeDefined();
+			expect(query.join?.length).toBe(1);
+			expect(query.join?.[0].table).toBe('posts');
+		});
+
+		it('includes multiple joins from array in query', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						comment_author_email: {
+							column: 'users.email',
+							join: [
+								{
+									table: 'posts',
+									alias: 'posts',
+									on: 'posts.user_id = users.id',
+								},
+								{
+									table: 'comments',
+									alias: 'comments',
+									on: 'comments.post_id = posts.id',
+								},
+								{
+									table: 'users',
+									alias: 'comment_authors',
+									on: 'comments.user_id = users.id',
+								},
+							],
+						},
+					};
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					columns: ['comment_author_email'],
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			const query = await endpoint['getQuery'](request);
+
+			expect(query.join).toBeDefined();
+			expect(query.join?.length).toBe(3);
+			expect(query.join?.[0].table).toBe('posts');
+			expect(query.join?.[1].table).toBe('comments');
+			expect(query.join?.[2].table).toBe('users');
+		});
+
+		it('mixes single joins and array joins correctly', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						profile_name: {
+							column: 'profile.name',
+							join: {
+								table: 'profiles',
+								alias: 'profile',
+								on: 'profile.user_id = users.id',
+							},
+						},
+						post_comment_count: {
+							column: 'COUNT(comments.id)',
+							join: [
+								{
+									table: 'posts',
+									alias: 'posts',
+									on: 'posts.user_id = users.id',
+								},
+								{
+									table: 'comments',
+									alias: 'comments',
+									on: 'comments.post_id = posts.id',
+								},
+							],
+						},
+					};
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					columns: ['profile_name', 'post_comment_count'],
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			const query = await endpoint['getQuery'](request);
+
+			expect(query.join).toBeDefined();
+			expect(query.join?.length).toBe(3);
+		});
+
+		it('handles array join in where clause', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						comment_content: {
+							column: 'comments.content',
+							join: [
+								{
+									table: 'posts',
+									alias: 'posts',
+									on: 'posts.user_id = users.id',
+								},
+								{
+									table: 'comments',
+									alias: 'comments',
+									on: 'comments.post_id = posts.id',
+								},
+							],
+						},
+					};
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					where: [
+						{
+							column: 'comment_content',
+							operator: 'LIKE',
+							value: '%test%',
+						},
+					],
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			const query = await endpoint['getQuery'](request);
+
+			expect(query.join).toBeDefined();
+			expect(query.join?.length).toBe(2);
+			expect(query.where).toBeDefined();
+		});
+
+		it('handles array join in aggregates', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						post_id: {
+							column: 'posts.id',
+							join: [
+								{
+									table: 'posts',
+									alias: 'posts',
+									on: 'posts.user_id = users.id',
+								},
+							],
+						},
+					};
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					groupBy: ['post_id'],
+					aggregates: [
+						{
+							column: 'post_id',
+							function: 'count',
+							alias: 'total_posts',
+						},
+					],
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			const query = await endpoint['getQuery'](request);
+
+			expect(query.join).toBeDefined();
+			expect(query.join?.length).toBe(1);
+		});
+
+		it('deduplicates joins in array with same table', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						post_data: {
+							column: 'posts.title',
+							join: [
+								{
+									table: 'posts',
+									alias: 'posts',
+									on: 'posts.user_id = users.id',
+								},
+								{
+									table: 'posts',
+									alias: 'posts',
+									on: 'posts.user_id = users.id',
+								},
+							],
+						},
+					};
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					columns: ['post_data'],
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			const query = await endpoint['getQuery'](request);
+
+			expect(query.join).toBeDefined();
+			// Deduplication happens by alias/table name
+			expect(query.join?.length).toBe(1);
+		});
+
+		it('handles array join in orderBy', async () => {
+			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+				override getColumnMap() {
+					return {
+						post_rating: {
+							column: 'posts.rating',
+							join: [
+								{
+									table: 'posts',
+									alias: 'posts',
+									on: 'posts.user_id = users.id',
+								},
+							],
+						},
+					};
+				}
+			}
+
+			const endpoint = new TestSearchEndpoint();
+			const request = {
+				body: {
+					columns: ['post_rating'],
+					orderBy: 'post_rating',
+					orderDirection: 'DESC',
+					limit: 10,
+					offset: 0,
+				},
+			};
+
+			const query = await endpoint['getQuery'](request);
+
+			expect(query.join).toBeDefined();
+			expect(query.join?.length).toBe(1);
+			expect(query.orderBy).toBeDefined();
+		});
+
 		it('creates where clause with single equality condition', async () => {
 			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
 				override getColumnMap() {
