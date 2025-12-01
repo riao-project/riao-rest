@@ -426,10 +426,13 @@ export class RiaoSearchEndpoint<
 		if (columns !== undefined && columns.length > 0) {
 			for (const column of columns) {
 				const selectColumn = joinColumn(column as string);
+				const columnKey = column as string;
 
-				if (!selectColumns[selectColumn.column as string]) {
-					selectColumns[selectColumn.column as string] =
-						selectColumn.column;
+				if (!selectColumns[columnKey]) {
+					selectColumns[columnKey] = {
+						column: selectColumn.column as string,
+						as: columnKey,
+					};
 				}
 			}
 		}
