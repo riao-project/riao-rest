@@ -84,12 +84,32 @@ export const aggregateArrayValidator = new ArrayValSan({
 	schema: aggregateColumnValidator,
 });
 
+export const orderItemValidator = new ObjectValSan({
+	schema: {
+		column: columnNameValidator,
+		direction: new ComposedValSan(
+			[
+				new LengthValidator({ minLength: 3, maxLength: 4 }),
+				new EnumValidator({
+					allowedValues: ['ASC', 'DESC'],
+				}),
+			],
+			{ isOptional: true }
+		),
+	},
+});
+
+export const orderArrayValidator = new ArrayValSan({
+	schema: orderItemValidator,
+});
+
 export const searchValidators = {
 	...listValidators,
 	columns: columnArrayValidator.copy({ isOptional: true }),
 	where: whereArrayValidator.copy({ isOptional: true }),
 	aggregates: aggregateArrayValidator.copy({ isOptional: true }),
 	groupBy: columnArrayValidator.copy({ isOptional: true }),
+	order: orderArrayValidator.copy({ isOptional: true }),
 };
 
 export interface RiaoSearchColumn<T extends DatabaseRecordWithId> {
@@ -115,6 +135,11 @@ export interface RiaoAggregateColumn {
 	alias?: string;
 }
 
+export interface RiaoOrderItem {
+	column: string;
+	direction?: 'ASC' | 'DESC';
+}
+
 export class RiaoSearchEndpoint<
 	T extends DatabaseRecordWithId,
 > extends RiaoEndpoint<T> {
@@ -125,8 +150,10 @@ export class RiaoSearchEndpoint<
 	override bodyExample = {
 		limit: 100,
 		offset: 0,
-		orderBy: 'id',
-		orderDirection: 'DESC',
+		order: [
+			{ column: 'name', direction: 'ASC' },
+			{ column: 'id', direction: 'ASC' },
+		],
 	};
 
 	override body = new ObjectValSan({
@@ -135,6 +162,7 @@ export class RiaoSearchEndpoint<
 			offset: listValidators.offset,
 			orderBy: listValidators.orderBy,
 			orderDirection: listValidators.orderDirection,
+			order: searchValidators.order,
 			columns: searchValidators.columns,
 			where: searchValidators.where,
 			aggregates: searchValidators.aggregates,
@@ -179,6 +207,7 @@ export class RiaoSearchEndpoint<
 			| 'ASC'
 			| 'DESC'
 			| undefined;
+		const order = request.body['order'] as RiaoOrderItem[] | undefined;
 
 		const query: SelectQuery<T> = {
 			limit: limit || 1000,
@@ -409,7 +438,21 @@ export class RiaoSearchEndpoint<
 			query.columns = Object.values(selectColumns);
 		}
 
-		if (orderBy !== undefined && orderDirection !== undefined) {
+		// Handle multiple order-by's via `order` array parameter
+		if (order !== undefined && order.length > 0) {
+			query.orderBy = {} as Partial<Record<keyof T, 'ASC' | 'DESC'>>;
+
+			for (const orderItem of order) {
+				const mappedColumn = joinColumn(orderItem.column);
+				const direction = orderItem.direction || 'ASC';
+
+				(query.orderBy as Record<string, 'ASC' | 'DESC'>)[
+					mappedColumn.column as string
+				] = direction;
+			}
+		}
+		else if (orderBy !== undefined && orderDirection !== undefined) {
+			// Handle legacy single orderBy + orderDirection parameters
 			const mappedColumn = joinColumn(orderBy as string);
 			query.orderBy = {
 				[mappedColumn.column as string]: orderDirection,

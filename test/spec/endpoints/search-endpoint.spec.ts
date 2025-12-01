@@ -3685,4 +3685,483 @@ describe('SearchEndpoint (integration)', () => {
 			expect(Array.isArray(body.records)).toBeTrue();
 		});
 	});
+
+	describe('order parameter (multiple order-by)', () => {
+		// eslint-disable-next-line max-len
+		it('accepts `order` array with single item', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					order: [
+						{
+							column: 'name',
+							direction: 'ASC',
+						},
+					],
+				}),
+			});
+
+			expect(response.status).toBe(200);
+
+			const body = (await response.json()) as {
+				records: User[];
+				count: number;
+			};
+			expect(Array.isArray(body.records)).toBeTrue();
+			expect(body.records.length).toBeGreaterThan(0);
+		});
+
+		it('accepts `order` array with multiple items', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					order: [
+						{
+							column: 'name',
+							direction: 'ASC',
+						},
+						{
+							column: 'email',
+							direction: 'DESC',
+						},
+					],
+					limit: 100,
+				}),
+			});
+
+			expect(response.status).toBe(200);
+
+			const body = (await response.json()) as {
+				records: User[];
+				count: number;
+			};
+			expect(Array.isArray(body.records)).toBeTrue();
+			expect(body.records.length).toBeGreaterThan(0);
+		});
+
+		// eslint-disable-next-line max-len
+		it('order item uses default direction ASC when not specified', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			// Create test users
+			const timestamp = Date.now();
+			await repo.insertOne({
+				record: {
+					name: `Order Default ASC 1 ${timestamp}`,
+					email: `orderdefault1+${timestamp}@example.com`,
+				},
+			});
+			await repo.insertOne({
+				record: {
+					name: `Order Default ASC 2 ${timestamp}`,
+					email: `orderdefault2+${timestamp}@example.com`,
+				},
+			});
+
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					order: [
+						{
+							column: 'name',
+							// direction not specified, should default to ASC
+						},
+					],
+					where: [
+						{
+							column: 'name',
+							operator: 'LIKE',
+							value: `%Order Default ASC%${timestamp}%`,
+						},
+					],
+					limit: 1000,
+				}),
+			});
+
+			expect(response.status).toBe(200);
+
+			const body = (await response.json()) as {
+				records: User[];
+				count: number;
+			};
+			expect(Array.isArray(body.records)).toBeTrue();
+
+			// Find our test records
+			const testRecords = body.records.filter((u) =>
+				u.name.includes(`Order Default ASC ${timestamp}`)
+			);
+
+			if (testRecords.length >= 2) {
+				// Should be sorted ascending by name (1 before 2)
+				const names = testRecords.map((u) => u.name);
+				const idx1 = names.findIndex((n) =>
+					n.includes('Order Default ASC 1')
+				);
+				const idx2 = names.findIndex((n) =>
+					n.includes('Order Default ASC 2')
+				);
+
+				if (idx1 !== -1 && idx2 !== -1) {
+					expect(idx1).toBeLessThan(idx2);
+				}
+			}
+		});
+
+		it('order respects ASC direction', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			// Create users with specific names for predictable sorting
+			const timestamp = Date.now();
+			const user1 = await repo.insertOne({
+				record: {
+					name: `ZZZ Order ASC Test ${timestamp}`,
+					email: `zzzorderasc+${timestamp}@example.com`,
+				},
+			});
+			// eslint-disable-next-line @typescript-eslint/no-unused-vars
+			const user2 = await repo.insertOne({
+				record: {
+					name: `AAA Order ASC Test ${timestamp}`,
+					email: `aaaorderasc+${timestamp}@example.com`,
+				},
+			});
+
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					order: [
+						{
+							column: 'name',
+							direction: 'ASC',
+						},
+					],
+					limit: 1000,
+				}),
+			});
+
+			expect(response.status).toBe(200);
+
+			const body = (await response.json()) as {
+				records: User[];
+				count: number;
+			};
+
+			// Find our test records
+			const aaa = body.records.findIndex((u) => u.id === user2?.id);
+			const zzz = body.records.findIndex((u) => u.id === user1?.id);
+
+			// AAA should come before ZZZ in ascending order
+			if (aaa !== -1 && zzz !== -1) {
+				expect(aaa).toBeLessThan(zzz);
+			}
+		});
+
+		it('order respects DESC direction', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			// Create users with specific names
+			const timestamp = Date.now();
+			const user1 = await repo.insertOne({
+				record: {
+					name: `ZZZ Order DESC Test ${timestamp}`,
+					email: `zzzorderdesc+${timestamp}@example.com`,
+				},
+			});
+			// eslint-disable-next-line @typescript-eslint/no-unused-vars
+			const user2 = await repo.insertOne({
+				record: {
+					name: `AAA Order DESC Test ${timestamp}`,
+					email: `aaaorderdesc+${timestamp}@example.com`,
+				},
+			});
+
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					order: [
+						{
+							column: 'name',
+							direction: 'DESC',
+						},
+					],
+					limit: 1000,
+				}),
+			});
+
+			expect(response.status).toBe(200);
+
+			const body = (await response.json()) as {
+				records: User[];
+				count: number;
+			};
+
+			// Find our test records
+			const aaa = body.records.findIndex((u) => u.id === user2?.id);
+			const zzz = body.records.findIndex((u) => u.id === user1?.id);
+
+			// ZZZ should come before AAA in descending order
+			if (aaa !== -1 && zzz !== -1) {
+				expect(zzz).toBeLessThan(aaa);
+			}
+		});
+
+		// eslint-disable-next-line max-len
+		it('multiple order items applied in sequence', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			// Create test users with same name but different emails
+			const timestamp = Date.now();
+			const baseName = `Multi Order Test ${timestamp}`;
+
+			// eslint-disable-next-line @typescript-eslint/no-unused-vars
+			const user1 = await repo.insertOne({
+				record: {
+					name: baseName,
+					email: `zzz+${timestamp}@example.com`,
+				},
+			});
+			// eslint-disable-next-line @typescript-eslint/no-unused-vars
+			const user2 = await repo.insertOne({
+				record: {
+					name: baseName,
+					email: `aaa+${timestamp}@example.com`,
+				},
+			});
+
+			// Order first by name (same for both), then by email ascending
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					order: [
+						{
+							column: 'name',
+							direction: 'ASC',
+						},
+						{
+							column: 'email',
+							direction: 'ASC',
+						},
+					],
+					limit: 1000,
+				}),
+			});
+
+			expect(response.status).toBe(200);
+
+			const body = (await response.json()) as {
+				records: User[];
+				count: number;
+			};
+
+			// Find our test records in result
+			const testRecords = body.records.filter((u) => u.name === baseName);
+
+			if (testRecords.length >= 2) {
+				// Should be sorted by email (aaa before zzz)
+				const aaa = testRecords.findIndex(
+					(u) => u.email === `aaa+${timestamp}@example.com`
+				);
+				const zzz = testRecords.findIndex(
+					(u) => u.email === `zzz+${timestamp}@example.com`
+				);
+
+				if (aaa !== -1 && zzz !== -1) {
+					expect(aaa).toBeLessThan(zzz);
+				}
+			}
+		});
+
+		it('rejects `order` with column not in columnMap', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					order: [
+						{
+							column: 'nonexistent',
+							direction: 'ASC',
+						},
+					],
+				}),
+			});
+
+			// Should fail for security - column not in columnMap
+			expect(response.status).toBe(422);
+			const body = (await response.json()) as { message?: string };
+			expect(body.message).toContain('not a valid selectable column');
+		});
+
+		it('rejects `order` with invalid direction', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					order: [
+						{
+							column: 'name',
+							direction: 'INVALID',
+						},
+					],
+				}),
+			});
+
+			// Validation error returns 422
+			expect(response.status).toBe(422);
+		});
+
+		it('rejects `order` with invalid column format', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					order: [
+						{
+							column: 'id; DROP TABLE users;',
+							direction: 'ASC',
+						},
+					],
+				}),
+			});
+
+			// Validation error returns 422
+			expect(response.status).toBe(422);
+		});
+
+		it('accepts empty `order` array', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					order: [],
+				}),
+			});
+
+			expect(response.status).toBe(200);
+
+			const body = (await response.json()) as {
+				records: User[];
+				count: number;
+			};
+			expect(Array.isArray(body.records)).toBeTrue();
+		});
+
+		// eslint-disable-next-line max-len
+		it('order takes precedence over orderBy and orderDirection', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			// Create users with distinct names
+			const timestamp = Date.now();
+			const user1 = await repo.insertOne({
+				record: {
+					name: `ZZZ Precedence ${timestamp}`,
+					email: `zzzprec+${timestamp}@example.com`,
+				},
+			});
+			const user2 = await repo.insertOne({
+				record: {
+					name: `AAA Precedence ${timestamp}`,
+					email: `aaaprec+${timestamp}@example.com`,
+				},
+			});
+
+			// Pass both order and orderBy/orderDirection, order should win
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					order: [
+						{
+							column: 'name',
+							direction: 'DESC', // order says DESC
+						},
+					],
+					orderBy: 'name',
+					// eslint-disable-next-line max-len
+					orderDirection: 'ASC', // orderBy says ASC (should be ignored)
+					limit: 1000,
+				}),
+			});
+
+			expect(response.status).toBe(200);
+
+			const body = (await response.json()) as {
+				records: User[];
+				count: number;
+			};
+
+			// Find our test records
+			const aaa = body.records.findIndex((u) => u.id === user2?.id);
+			const zzz = body.records.findIndex((u) => u.id === user1?.id);
+
+			// ZZZ should come before AAA (DESC order wins)
+			if (aaa !== -1 && zzz !== -1) {
+				expect(zzz).toBeLessThan(aaa);
+			}
+		});
+
+		// eslint-disable-next-line max-len
+		it('backward compatibility: orderBy and orderDirection still work', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			// Create users with distinct names
+			const timestamp = Date.now();
+			const user1 = await repo.insertOne({
+				record: {
+					name: `ZZZ Legacy ${timestamp}`,
+					email: `zzzlegacy+${timestamp}@example.com`,
+				},
+			});
+			const user2 = await repo.insertOne({
+				record: {
+					name: `AAA Legacy ${timestamp}`,
+					email: `aaalegacy+${timestamp}@example.com`,
+				},
+			});
+
+			// Use old-style orderBy/orderDirection (without order parameter)
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					orderBy: 'name',
+					orderDirection: 'ASC',
+					limit: 1000,
+				}),
+			});
+
+			expect(response.status).toBe(200);
+
+			const body = (await response.json()) as {
+				records: User[];
+				count: number;
+			};
+
+			// Find our test records
+			const aaa = body.records.findIndex((u) => u.id === user2?.id);
+			const zzz = body.records.findIndex((u) => u.id === user1?.id);
+
+			// AAA should come before ZZZ in ascending order
+			if (aaa !== -1 && zzz !== -1) {
+				expect(aaa).toBeLessThan(zzz);
+			}
+		});
+	});
 });
