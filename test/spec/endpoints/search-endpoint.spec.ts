@@ -4,7 +4,7 @@ import { repo, User } from '../../../examples/quick-start';
 import { RiaoSearchEndpoint } from '../../../src/endpoints';
 import { and, like } from '@riao/dbal';
 import { identifier } from '@riao/dbal/expression/identifier';
-import { postsRepo, Post } from './search-aggregation.endpoints';
+import { postsRepo } from './search-aggregation.endpoints';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function findColumn(
@@ -1640,7 +1640,9 @@ describe('SearchEndpoint (integration)', () => {
 				},
 			});
 
-			const testUser = await repo.findOneOrFail({ where: { id: testUserId } });
+			const testUser = await repo.findOneOrFail({
+				where: { id: testUserId },
+			});
 
 			// Request columns available in SearchUsersEndpoint's getColumnMap()
 			const response = await fetch(url, {
@@ -1664,9 +1666,8 @@ describe('SearchEndpoint (integration)', () => {
 			const found = body.records.find((u) => u.id === testUser.id);
 			expect(found).toBeDefined();
 			expect(found!.name).toEqual(testUser.name);
-			expect(found!.email).toEqual(testUser.email);	
+			expect(found!.email).toEqual(testUser.email);
 		});
-
 
 		it('can select joined columns via getColumnMap()', async () => {
 			const url = `${env.API_URL}/users-with-posts-search/search`;
@@ -1682,7 +1683,7 @@ describe('SearchEndpoint (integration)', () => {
 
 			// Create a post for the user
 			const postTitle = `Test Post ${timestamp}`;
-			const { id: postId } = await postsRepo.insertOne({
+			await postsRepo.insertOne({
 				record: {
 					user_id: userId,
 					title: postTitle,
@@ -1725,118 +1726,114 @@ describe('SearchEndpoint (integration)', () => {
 			expect(rec.post_title).toEqual(postTitle);
 		});
 
-		it('count reflects total matching records, not total table rows',
-			async () => {
-				const url = `${env.API_URL}/users-with-posts-search/search`;
+		it('count reflects total matching records', async () => {
+			const url = `${env.API_URL}/users-with-posts-search/search`;
 
-				// Create a user WITH a post
-				const timestamp = Date.now();
-				const { id: userWithPostId } = await repo.insertOne({
-					record: {
-						name: `User With Post ${timestamp}`,
-						email: `userwithpost+${timestamp}@example.com`,
-					},
-				});
-
-				// Add a post for this user
-				await postsRepo.insertOne({
-					record: {
-						user_id: userWithPostId,
-						title: `Post for Count Test ${timestamp}`,
-						rating: 5,
-						created_at: new Date().toISOString(),
-					},
-				});
-
-				// Also create a user WITHOUT a post
-				await repo.insertOne({
-					record: {
-						name: `User Without Post ${timestamp}`,
-						email: `userwithoutpost+${timestamp}@example.com`,
-					},
-				});
-
-				// Query the joined endpoint
-				const response = await fetch(url, {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({
-						columns: ['id', 'name', 'post_title'],
-						limit: 100,
-					}),
-				});
-
-				expect(response.status).toBe(200);
-
-				const body = (await response.json()) as {
-					records: unknown[];
-					count: number;
-				};
-
-				// With INNER JOIN on posts, only users with posts are
-				// returned. The count should reflect the number of joined
-				// records, not the total users in the table.
-				expect(body.records.length).toEqual(body.count);
-
-				// Our user with post should be in results
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				const foundUser = body.records.find(
-					(r: any) => r.id === userWithPostId
-				);
-				expect(foundUser).toBeDefined();
+			// Create a user WITH a post
+			const timestamp = Date.now();
+			const { id: userWithPostId } = await repo.insertOne({
+				record: {
+					name: `User With Post ${timestamp}`,
+					email: `userwithpost+${timestamp}@example.com`,
+				},
 			});
 
-		it('respects getColumnMap() when filtering WHERE clauses',
-			async () => {
-				const url = `${env.API_URL}/users/search`;
-
-				// Create test users with specific names
-				const timestamp = Date.now();
-				const targetName = `ColumnMap Filter ${timestamp}`;
-
-				const { id: testUserId } = await repo.insertOne({
-					record: {
-						name: targetName,
-						email: `columnmapfilter+${timestamp}@example.com`,
-					},
-				});
-
-				const testUser = await repo.findOneOrFail({ where: { id: testUserId } });
-
-				// Filter using a column defined in getColumnMap()
-				const response = await fetch(url, {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({
-						where: [
-							{
-								column: 'name',
-								operator: '=',
-								value: targetName,
-							},
-						],
-						columns: ['id', 'name'],
-						limit: 100,
-					}),
-				});
-
-				expect(response.status).toBe(200);
-
-				const body = (await response.json()) as {
-					records: User[];
-					count: number;
-				};
-
-				// Should find the test user via the mapped column
-				const filtered = body.records.filter(
-					(u) => u.name === targetName
-				);
-				expect(filtered.length).toBeGreaterThanOrEqual(1);
-
-				const found = filtered.find((u) => u.id === testUser.id);
-				expect(found).toBeDefined();
-
+			// Add a post for this user
+			await postsRepo.insertOne({
+				record: {
+					user_id: userWithPostId,
+					title: `Post for Count Test ${timestamp}`,
+					rating: 5,
+					created_at: new Date().toISOString(),
+				},
 			});
+
+			// Also create a user WITHOUT a post
+			await repo.insertOne({
+				record: {
+					name: `User Without Post ${timestamp}`,
+					email: `userwithoutpost+${timestamp}@example.com`,
+				},
+			});
+
+			// Query the joined endpoint
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					columns: ['id', 'name', 'post_title'],
+					limit: 100,
+				}),
+			});
+
+			expect(response.status).toBe(200);
+
+			const body = (await response.json()) as {
+				records: User[];
+				count: number;
+			};
+
+			// With INNER JOIN on posts, only users with posts are
+			// returned. The count should reflect the number of joined
+			// records, not the total users in the table.
+			expect(body.records.length).toEqual(body.count);
+
+			// Our user with post should be in results
+			const foundUser = body.records.find(
+				(r) => r.id === userWithPostId
+			);
+			expect(foundUser).toBeDefined();
+		});
+
+		it('respects getColumnMap() when filtering WHERE clauses', async () => {
+			const url = `${env.API_URL}/users/search`;
+
+			// Create test users with specific names
+			const timestamp = Date.now();
+			const targetName = `ColumnMap Filter ${timestamp}`;
+
+			const { id: testUserId } = await repo.insertOne({
+				record: {
+					name: targetName,
+					email: `columnmapfilter+${timestamp}@example.com`,
+				},
+			});
+
+			const testUser = await repo.findOneOrFail({
+				where: { id: testUserId },
+			});
+
+			// Filter using a column defined in getColumnMap()
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					where: [
+						{
+							column: 'name',
+							operator: '=',
+							value: targetName,
+						},
+					],
+					columns: ['id', 'name'],
+					limit: 100,
+				}),
+			});
+
+			expect(response.status).toBe(200);
+
+			const body = (await response.json()) as {
+				records: User[];
+				count: number;
+			};
+
+			// Should find the test user via the mapped column
+			const filtered = body.records.filter((u) => u.name === targetName);
+			expect(filtered.length).toBeGreaterThanOrEqual(1);
+
+			const found = filtered.find((u) => u.id === testUser.id);
+			expect(found).toBeDefined();
+		});
 
 		it('respects getColumnMap() in orderBy operations', async () => {
 			const url = `${env.API_URL}/users/search`;
@@ -1920,7 +1917,9 @@ describe('SearchEndpoint (integration)', () => {
 							join: {
 								table: 'profiles',
 								alias: 'profile',
-								on: {'profile.user_id': identifier('users.id')}
+								on: {
+									'profile.user_id': identifier('users.id'),
+								},
 							},
 						},
 					};
