@@ -1,6 +1,6 @@
 {
 	"name": "@riao/rest",
-	"version": "2.1.1",
+	"version": "2.1.2",
 	"description": "Riao REST API framework",
 	"private": "true",
 	"typescript-template": {
@@ -23,7 +23,7 @@
 	},
 	"dependencies": {
 		"@riao/dbal": "^3.7.0",
-		"api-machine": "^1.2.0",
+		"api-machine": "^1.2.1",
 		"valsan": "^2.3.0"
 	},
 	"devDependencies": {
