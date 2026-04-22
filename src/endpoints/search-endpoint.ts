@@ -483,9 +483,16 @@ export class RiaoSearchEndpoint<
 	) {
 		const query = await this.getQuery(request);
 
+		// Create a count query without limit/offset to get total matching records
+		const countQuery = {
+			...query,
+			limit: undefined,
+			offset: undefined,
+		};
+
 		const [records, count] = await Promise.all([
 			this.repo.find(query),
-			this.repo.count(),
+			this.repo.count(countQuery),
 		]);
 
 		return {

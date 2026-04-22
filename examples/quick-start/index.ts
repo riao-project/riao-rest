@@ -18,6 +18,7 @@ import {
 } from 'valsan';
 import { RiaoRouter } from '../../src/router';
 import { RiaoSearchEndpoint } from '../../src/endpoints/search-endpoint';
+import { identifier } from '@riao/dbal/expression/identifier';
 import {
 	ListPostsEndpoint,
 	SearchPostsEndpoint,
@@ -28,6 +29,7 @@ import {
 	Post,
 	Comment,
 } from '../../test/spec/endpoints/search-aggregation.endpoints';
+import { Join } from '@riao/dbal';
 
 export interface User {
 	id: string;
@@ -99,6 +101,27 @@ class SearchUsersEndpoint extends RiaoSearchEndpoint<User> {
 			id: { column: 'id' },
 			name: { column: 'name' },
 			email: { column: 'email' },
+		};
+	}
+}
+
+class SearchUsersWithPostsEndpoint extends RiaoSearchEndpoint<User> {
+	override getColumnMap() {
+		return {
+			id: { column: 'users.id' },
+			name: { column: 'users.name' },
+			email: { column: 'users.email' },
+			// Post title joined column
+			post_title: {
+				column: 'posts.title',
+				join: <Join>{
+					table: 'posts',
+					type: 'LEFT',
+					on: {
+						'posts.user_id': identifier('users.id'),
+					},
+				},
+			},
 		};
 	}
 }
@@ -185,9 +208,23 @@ export class CommentsRouter extends RiaoRouter<Comment> {
 	}
 }
 
+class UsersWithPostsSearchRouter extends RiaoRouter<User> {
+	override repo = repo;
+	override path = '/users-with-posts-search';
+
+	protected override async routes(): Promise<ApiRoute[]> {
+		return [SearchUsersWithPostsEndpoint];
+	}
+}
+
 class MainRouter extends RiaoRouter {
 	protected override async routes(): Promise<ApiRoute[]> {
-		return [UsersRouter, PostsRouter, CommentsRouter];
+		return [
+			UsersRouter,
+			PostsRouter,
+			CommentsRouter,
+			UsersWithPostsSearchRouter,
+		];
 	}
 }
 
