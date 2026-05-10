@@ -1,6 +1,6 @@
 {
 	"name": "@riao/rest",
-	"version": "2.1.2",
+	"version": "2.1.3",
 	"description": "Riao REST API framework",
 	"private": "true",
 	"typescript-template": {
