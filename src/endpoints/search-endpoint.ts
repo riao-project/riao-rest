@@ -491,6 +491,7 @@ export class RiaoSearchEndpoint<
 				...query,
 				limit: undefined,
 				offset: undefined,
+				orderBy: undefined,
 			}),
 		]);
 
