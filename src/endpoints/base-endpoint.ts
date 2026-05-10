@@ -1,7 +1,8 @@
-import { DatabaseRecord, QueryRepository } from '@riao/dbal';
+import { QueryRepository } from '@riao/dbal';
 import { BaseApiEndpoint, NotFoundError } from 'api-machine';
+import { DatabaseRecordWithId } from '@riao/rest-contract';
 
-export type DatabaseRecordWithId = DatabaseRecord & { id: string };
+export { DatabaseRecordWithId };
 
 export abstract class RiaoEndpoint<
 	T extends DatabaseRecordWithId,

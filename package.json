@@ -23,6 +23,7 @@
 	},
 	"dependencies": {
 		"@riao/dbal": "^3.7.0",
+		"@riao/rest-contract": "^1.0.0",
 		"api-machine": "^1.2.1",
 		"valsan": "^2.3.0"
 	},
