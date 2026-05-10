@@ -36,6 +36,12 @@ import { KeyValExpression } from '@riao/dbal/expression/key-val-expression';
 import { DatabaseFunctionToken } from '@riao/dbal/functions/function-token';
 import { identifier } from '@riao/dbal/expression/identifier';
 
+import {
+	RiaoSearchCondition,
+	RiaoAggregateColumn,
+	RiaoOrderItem,
+} from '@riao/rest-contract';
+
 export const columnNameValidator = new ComposedValSan([
 	new LengthValidator({ minLength: 1, maxLength: 255 }),
 	new PatternValidator({ pattern: /^[a-zA-Z0-9_.]+$/ }),
@@ -117,27 +123,6 @@ export interface RiaoSearchColumn<T extends DatabaseRecordWithId> {
 	// Supports both single joins and arrays of joins for complex
 	// multi-table relations
 	join?: Join | Join[];
-}
-
-export interface RiaoSearchCondition {
-	column: string;
-	operator: '=' | '<' | '<=' | '>' | '>=' | 'LIKE' | 'INARRAY' | 'BETWEEN';
-	value: string | number | boolean | null;
-	minValue?: string | number;
-	maxValue?: string | number;
-}
-
-export type AggregateFunction = 'count' | 'sum' | 'avg' | 'min' | 'max';
-
-export interface RiaoAggregateColumn {
-	column: string;
-	function: AggregateFunction;
-	alias?: string;
-}
-
-export interface RiaoOrderItem {
-	column: string;
-	direction?: 'ASC' | 'DESC';
 }
 
 export class RiaoSearchEndpoint<
