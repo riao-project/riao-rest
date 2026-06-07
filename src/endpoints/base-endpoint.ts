@@ -7,7 +7,12 @@ export { DatabaseRecordWithId };
 export abstract class RiaoEndpoint<
 	T extends DatabaseRecordWithId,
 > extends BaseApiEndpoint {
-	public repo: QueryRepository<T>;
+	public repo!: QueryRepository<T>;
+
+	public override inject(): void {
+		super.inject();
+		this.repo = this.container.require<QueryRepository<T>>('repo');
+	}
 
 	protected async findOneOr404(id: string): Promise<T> {
 		const record = await this.repo.findOne({ where: <T>{ id: id } });
