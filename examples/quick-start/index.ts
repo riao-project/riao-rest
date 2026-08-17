@@ -5,6 +5,8 @@ import {
 	RiaoGetOneEndpoint,
 	RiaoUpdateEndpoint,
 	RiaoDeleteEndpoint,
+	RiaoBulkUpdateEndpoint,
+	RiaoBulkDeleteEndpoint,
 } from '../../src/endpoints';
 import { ApiRoute } from 'api-machine/router/base';
 import { maindb } from '../../database/main';
@@ -174,6 +176,10 @@ class DeleteUserEndpoint extends RiaoDeleteEndpoint<User> {
 	});
 }
 
+class BulkUpdateUsersEndpoint extends RiaoBulkUpdateEndpoint<User> {}
+
+class BulkDeleteUsersEndpoint extends RiaoBulkDeleteEndpoint<User> {}
+
 class UsersRouter extends RiaoRouter<User> {
 	override repo = repo;
 	override path = '/users';
@@ -186,6 +192,8 @@ class UsersRouter extends RiaoRouter<User> {
 			SearchUsersEndpoint,
 			UpdateUserEndpoint,
 			DeleteUserEndpoint,
+			BulkUpdateUsersEndpoint,
+			BulkDeleteUsersEndpoint,
 		];
 	}
 }
