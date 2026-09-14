@@ -1942,7 +1942,7 @@ describe('SearchEndpoint (integration)', () => {
 			expect(query.join?.[0].table).toBe('profiles');
 		});
 
-		it('skips columns when none are provided', async () => {
+		it('selects non-join columns when none are provided', async () => {
 			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
 				override getColumnMap() {
 					return {
@@ -1961,10 +1961,13 @@ describe('SearchEndpoint (integration)', () => {
 
 			const query = await endpoint['getQuery'](request);
 
-			expect(query.columns).toBeUndefined();
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			expect((query.columns as any)).toEqual([
+				{ column: 'id', as: 'id' },
+			]);
 		});
 
-		it('handles empty columns array', async () => {
+		it('selects non-join columns from empty columns array', async () => {
 			class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
 				override getColumnMap() {
 					return {
@@ -1984,7 +1987,10 @@ describe('SearchEndpoint (integration)', () => {
 
 			const query = await endpoint['getQuery'](request);
 
-			expect(query.columns).toBeUndefined();
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			expect((query.columns as any)).toEqual([
+				{ column: 'id', as: 'id' },
+			]);
 		});
 
 		it('can join tables twice with aliases', async () => {
@@ -1996,7 +2002,7 @@ describe('SearchEndpoint (integration)', () => {
 							join: {
 								table: 'profiles',
 								alias: 'profile',
-								// TODO: This shouldn't work? SQL Injection risk?
+								// TODO: This shouldn't work?
 								on: 'profile.user_id = users.id',
 							},
 						},
@@ -3952,6 +3958,335 @@ describe('SearchEndpoint (integration)', () => {
 			const body = (await response.json()) as any;
 			expect(Array.isArray(body.records)).toBeTrue();
 		});
+
+		// eslint-disable-next-line max-len
+		it(
+			'excludes columns not in column-map when no ' +
+				'columns are specified',
+			async () => {
+				class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+					override getColumnMap() {
+						return {
+							id: { column: 'id' },
+							name: { column: 'name' },
+						};
+					}
+				}
+
+				const endpoint = new TestSearchEndpoint();
+				const request = {
+					body: {
+						limit: 10,
+						offset: 0,
+					},
+				};
+
+				const query = await endpoint['getQuery'](request);
+
+				// Should only include columns in columnMap
+				expect(query.columns).toBeDefined();
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const columnList = query.columns as any[];
+				const columnNames = columnList.map((c) => c.as);
+
+				// Should have exactly the columns from the map
+				expect(columnNames).toContain('id');
+				expect(columnNames).toContain('name');
+				expect(columnNames.length).toBe(2);
+
+				// Should NOT include any columns outside the map
+				expect(columnNames).not.toContain('email');
+				expect(columnNames).not.toContain('extra_field');
+			}
+		);
+
+		// eslint-disable-next-line max-len
+		it(
+			'excludes join columns when no column array is provided',
+			async () => {
+				class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+					override getColumnMap() {
+						return {
+							id: { column: 'id' },
+							name: { column: 'name' },
+							profile_name: {
+								column: 'profile.name',
+								join: {
+									table: 'profiles',
+									alias: 'profile',
+									on: {
+										'profile.user_id':
+											identifier('users.id'),
+									},
+								},
+							},
+						};
+					}
+				}
+
+				const endpoint = new TestSearchEndpoint();
+				const request = {
+					body: {
+						limit: 10,
+						offset: 0,
+					},
+				};
+
+				const query = await endpoint['getQuery'](request);
+
+				// Should include non-join columns only
+				expect(query.columns).toBeDefined();
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const columnList = query.columns as any[];
+				const columnNames = columnList.map((c) => c.as);
+
+				// Should have only non-join columns
+				expect(columnNames).toContain('id');
+				expect(columnNames).toContain('name');
+				expect(columnNames).not.toContain('profile_name');
+
+				// Should NOT have joins when only non-join columns are
+				// selected
+				expect(query.join).toBeUndefined();
+			}
+		);
+
+		it(
+			'excludes join columns from default selection ' +
+				'with empty columns array',
+			async () => {
+				class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+					override getColumnMap() {
+						return {
+							id: { column: 'id' },
+							name: { column: 'name' },
+							profile_address: {
+								column: 'profile.address',
+								join: {
+									table: 'profiles',
+									alias: 'profile',
+									on: {
+										'profile.user_id':
+											identifier('users.id'),
+									},
+								},
+							},
+							company_name: {
+								column: 'company.name',
+								join: {
+									table: 'companies',
+									alias: 'company',
+									on: {
+										'company.id':
+											identifier('users.company_id'),
+									},
+								},
+							},
+						};
+					}
+				}
+
+				const endpoint = new TestSearchEndpoint();
+				const request = {
+					body: {
+						columns: [],
+						limit: 10,
+						offset: 0,
+					},
+				};
+
+				const query = await endpoint['getQuery'](request);
+
+				// Empty array should select non-join columns only
+				// columns
+				expect(query.columns).toBeDefined();
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const columnList = query.columns as any[];
+				const columnNames = columnList.map((c) => c.as);
+
+				// Should have only non-join columns
+				expect(columnNames).toContain('id');
+				expect(columnNames).toContain('name');
+				expect(columnNames).not.toContain('profile_address');
+				expect(columnNames).not.toContain('company_name');
+
+				// Should NOT have any joins
+				expect(query.join).toBeUndefined();
+			}
+		);
+
+		// eslint-disable-next-line max-len
+		it(
+			'can retrieve joined columns when specified in column array',
+			async () => {
+				class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+					override getColumnMap() {
+						return {
+							id: { column: 'id' },
+							name: { column: 'name' },
+							profile_name: {
+								column: 'profile.name',
+								join: {
+									table: 'profiles',
+									alias: 'profile',
+									on: {
+										'profile.user_id':
+											identifier('users.id'),
+									},
+								},
+							},
+						};
+					}
+				}
+
+				const endpoint = new TestSearchEndpoint();
+				const request = {
+					body: {
+						columns: ['id', 'profile_name'],
+						limit: 10,
+						offset: 0,
+					},
+				};
+
+				const query = await endpoint['getQuery'](request);
+
+				// Include both non-join and join columns when specified
+				// specified
+				expect(query.columns).toBeDefined();
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const columnList = query.columns as any[];
+				const columnNames = columnList.map((c) => c.as);
+
+				expect(columnNames).toContain('id');
+				expect(columnNames).toContain('profile_name');
+
+				// Should have the necessary join in the query
+				expect(query.join).toBeDefined();
+				expect(query.join?.length).toBe(1);
+				expect(query.join?.[0].table).toBe('profiles');
+			}
+		);
+
+		// eslint-disable-next-line max-len
+		it(
+			'can retrieve multiple joined columns when specified',
+			async () => {
+				class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+					override getColumnMap() {
+						return {
+							id: { column: 'id' },
+							name: { column: 'name' },
+							profile_bio: {
+								column: 'profile.bio',
+								join: {
+									table: 'profiles',
+									alias: 'profile',
+									on: {
+										'profile.user_id':
+											identifier('users.id'),
+									},
+								},
+							},
+							company_name: {
+								column: 'company.name',
+								join: {
+									table: 'companies',
+									alias: 'company',
+									on: {
+										'company.id':
+											identifier('users.company_id'),
+									},
+								},
+							},
+						};
+					}
+				}
+
+				const endpoint = new TestSearchEndpoint();
+				const request = {
+					body: {
+						columns: ['id', 'profile_bio', 'company_name'],
+						limit: 10,
+						offset: 0,
+					},
+				};
+
+				const query = await endpoint['getQuery'](request);
+
+				// Should include all specified columns
+				expect(query.columns).toBeDefined();
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const columnList = query.columns as any[];
+				const columnNames = columnList.map((c) => c.as);
+
+				expect(columnNames).toContain('id');
+				expect(columnNames).toContain('profile_bio');
+				expect(columnNames).toContain('company_name');
+
+				// Should have both joins in the query
+				expect(query.join).toBeDefined();
+				expect(query.join?.length).toBe(2);
+
+				const tableNames = query.join?.map((j) => j.table) || [];
+				expect(tableNames).toContain('profiles');
+				expect(tableNames).toContain('companies');
+			}
+		);
+
+		// eslint-disable-next-line max-len
+		it(
+			'handles mix of join and non-join columns when specified',
+			async () => {
+				class TestSearchEndpoint extends RiaoSearchEndpoint<User> {
+					override getColumnMap() {
+						return {
+							id: { column: 'id' },
+							name: { column: 'name' },
+							email: { column: 'email' },
+							profile_name: {
+								column: 'profile.name',
+								join: {
+									table: 'profiles',
+									alias: 'profile',
+									on: {
+										'profile.user_id':
+											identifier('users.id'),
+									},
+								},
+							},
+						};
+					}
+				}
+
+				const endpoint = new TestSearchEndpoint();
+				const request = {
+					body: {
+						columns: ['name', 'email', 'profile_name'],
+						limit: 10,
+						offset: 0,
+					},
+				};
+
+				const query = await endpoint['getQuery'](request);
+
+				// Include all specified columns
+				// non-join)
+				expect(query.columns).toBeDefined();
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const columnList = query.columns as any[];
+				const columnNames = columnList.map((c) => c.as);
+
+				expect(columnNames).toContain('name');
+				expect(columnNames).toContain('email');
+				expect(columnNames).toContain('profile_name');
+				expect(columnNames).not.toContain('id');
+
+				// Join exists if join column was specified
+				expect(query.join).toBeDefined();
+				expect(query.join?.length).toBe(1);
+				expect(query.join?.[0].table).toBe('profiles');
+			}
+		);
 	});
 
 	describe('order parameter (multiple order-by)', () => {
