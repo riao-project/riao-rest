@@ -305,11 +305,18 @@ describe('SearchEndpoint complex aggregation scenarios', () => {
 			.toBe(200);
 
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const body = (await response.json()) as { records: any[] };
+		const body = (await response.json()) as { records: any[]; count: number };
 
 		expect(Array.isArray(body.records))
 			.withContext('body.records should be an array')
 			.toBeTrue();
+
+		// Count should be the number of groups (2), not total records (3)
+		expect(body.count)
+			.withContext(
+				'count should be number of groups (2), not total records (3)'
+			)
+			.toBe(2);
 
 		// Find the records for our specific test posts
 		// Filter to only the posts created in this test

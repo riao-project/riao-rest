@@ -410,20 +410,46 @@ export class RiaoSearchEndpoint<
 
 		if (columns !== undefined && columns.length > 0) {
 			for (const column of columns) {
-				const selectColumn = joinColumn(column as string);
+				const mappedColumn = joinColumn(column as string);
 				const columnKey = column as string;
 
 				if (!selectColumns[columnKey]) {
 					selectColumns[columnKey] = {
-						column: selectColumn.column as string,
+						column: mappedColumn.column as string,
 						as: columnKey,
+					};
+				}
+			}
+		}
+		else {
+			// use all non-join columns from columnMap when no columns specified
+			for (const [columnKey, mappedColumn] of Object.entries(columnMap)) {
+				if (!mappedColumn.join) {
+					selectColumns[columnKey] = {
+						column: mappedColumn.column as string,
+						as: columnKey,
+					};
+				}
+			}
+
+			// ensure groupBy columns are included in select when using
+			// default column selection since many databases require them to
+			// be in both SELECT and GROUP BY clauses
+			if (groupBy !== undefined && groupBy.length > 0) {
+				for (const col of groupBy) {
+					const mappedColumn = joinColumn(col);
+					selectColumns[col] = {
+						column: mappedColumn.column as string,
+						as: col,
 					};
 				}
 			}
 		}
 
 		if (Object.keys(selectColumns).length > 0) {
-			query.columns = Object.values(selectColumns);
+			query.columns = Object.values(
+				selectColumns
+			) as SelectColumn<T>[];
 		}
 
 		// Handle multiple order-by's via `order` array parameter
