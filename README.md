@@ -27,6 +27,7 @@ npm install @riao/rest api-machine valsan
 
 `src/users.ts`
 ```typescript
+import { Database } from '@riao/dbal';
 import { RestServer } from 'api-machine';
 import {
     RiaoRouter,
@@ -263,6 +264,50 @@ class YourRouter extends RiaoRouter<YourModel> {
   }
 }
 ```
+
+## Authentication and Authorization
+
+`RiaoRouter` and `RiaoEndpoint` inherit `api-machine`'s Hidi security configuration. Configure a bearer validator that returns the resolved IAM principal (or `false`), and provide an authorization service on the server. Protected endpoints declare an authorization requirement; the decision uses `request.principal`, not a principal ID supplied in the request body.
+
+```typescript
+import { RestServer } from 'api-machine';
+import { RiaoGetListEndpoint } from '@riao/rest';
+import { RiaoOAuth2BearerAuthenticationScheme } from '@riao/rest';
+import { RbacAuthorization } from '@riao/authz-rbac';
+import { Principal } from '@riao/iam/auth';
+import { Database } from '@riao/dbal';
+
+declare const oauth: {
+  verifyAccessToken(token: string): Promise<
+    { principal_id: string } | null
+  >;
+  findActivePrincipal(options: {
+    where: Partial<Principal>;
+  }): Promise<Principal | null>;
+};
+declare const db: Database;
+
+interface Document {
+  id: string;
+  title: string;
+}
+
+const authentication = new RiaoOAuth2BearerAuthenticationScheme(oauth);
+
+const authorizer = new RbacAuthorization({ db });
+
+class Server extends RestServer {
+  constructor() {
+    super({ port: 4010, authentication, authorizer });
+  }
+}
+
+class ListDocumentsEndpoint extends RiaoGetListEndpoint<Document> {
+  override authorization = { action: 'read', resource: 'documents' };
+}
+```
+
+Router/endpoint `authentication` and `authorizer` values override inherited providers. Set `authentication = null` to explicitly opt a route out of authentication. Authorization requirements are opt-in per endpoint; a route with a requirement but no authenticated principal receives `401`, and a denied decision receives `403`.
 
 ## Customization
 
