@@ -267,7 +267,7 @@ class YourRouter extends RiaoRouter<YourModel> {
 
 ## Authentication and Authorization
 
-`RiaoRouter` and `RiaoEndpoint` inherit `api-machine`'s Hidi security configuration. Configure a bearer validator that returns the resolved IAM principal (or `false`), and provide an authorization service on the server. Protected endpoints declare an authorization requirement; the decision uses `request.principal`, not a principal ID supplied in the request body.
+`RiaoRouter` and `RiaoEndpoint` inherit `api-machine`'s Hidi security configuration. Configure a bearer validator that returns the resolved IAM principal (or `false`), and provide an authorization service on the server.
 
 ```typescript
 import { RestServer } from 'api-machine';
@@ -277,14 +277,6 @@ import { RbacAuthorization } from '@riao/authz-rbac';
 import { Principal } from '@riao/iam/auth';
 import { Database } from '@riao/dbal';
 
-declare const oauth: {
-  verifyAccessToken(token: string): Promise<
-    { principal_id: string } | null
-  >;
-  findActivePrincipal(options: {
-    where: Partial<Principal>;
-  }): Promise<Principal | null>;
-};
 declare const db: Database;
 
 interface Document {
@@ -292,7 +284,14 @@ interface Document {
   title: string;
 }
 
-const authentication = new RiaoOAuth2BearerAuthenticationScheme(oauth);
+const authentication = new RiaoOAuth2BearerAuthenticationScheme({
+  verifyAccessToken(token: string): Promise<
+    { principal_id: string } | null
+  >;
+  findActivePrincipal(options: {
+    where: Partial<Principal>;
+  }): Promise<Principal | null>;
+});
 
 const authorizer = new RbacAuthorization({ db });
 
@@ -307,7 +306,7 @@ class ListDocumentsEndpoint extends RiaoGetListEndpoint<Document> {
 }
 ```
 
-Router/endpoint `authentication` and `authorizer` values override inherited providers. Set `authentication = null` to explicitly opt a route out of authentication. Authorization requirements are opt-in per endpoint; a route with a requirement but no authenticated principal receives `401`, and a denied decision receives `403`.
+Router/endpoint `authentication` and `authorizer` values override inherited providers. Set `authentication = null` to explicitly opt a route out of authentication (make it public). Authorization requirements are opt-in per endpoint; a route with a requirement but no authenticated principal receives `401`, and a denied decision receives `403`.
 
 ## Customization
 
