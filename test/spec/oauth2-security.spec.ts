@@ -1,6 +1,11 @@
 import 'jasmine';
-import { AuthenticatedPrincipal } from 'api-machine';
 import {
+	ApiRequest,
+	AuthenticatedPrincipal,
+	UnauthorizedError,
+} from 'api-machine';
+import {
+	RiaoOAuth2BearerAuthenticationScheme,
 	RiaoOAuth2TokenAuthenticator,
 } from '../../src/authentication';
 
@@ -13,6 +18,8 @@ describe('RiaoOAuth2BearerAuthenticationScheme Security', () => {
 	let principal: TestPrincipal;
 	let inactivePrincipal: TestPrincipal;
 	let authenticator: RiaoOAuth2TokenAuthenticator<TestPrincipal>;
+	let scheme: RiaoOAuth2BearerAuthenticationScheme<TestPrincipal>;
+	let request: ApiRequest;
 
 	beforeEach(() => {
 		principal = {
@@ -43,6 +50,8 @@ describe('RiaoOAuth2BearerAuthenticationScheme Security', () => {
 				return null;
 			},
 		};
+		scheme = new RiaoOAuth2BearerAuthenticationScheme(authenticator);
+		request = { headers: {}, ip: '127.0.0.1' } as ApiRequest;
 	});
 
 	it('rejects tokens for inactive principals', async () => {
@@ -50,25 +59,16 @@ describe('RiaoOAuth2BearerAuthenticationScheme Security', () => {
 			principal_id: inactivePrincipal.id,
 		});
 
-		const result = await authenticator.verifyAccessToken('token');
-		expect(result?.principal_id).toBe('principal-2');
-
-		const resolvedPrincipal =
-			await authenticator.findActivePrincipal({
-				where: { id: inactivePrincipal.id } as Partial<TestPrincipal>,
-			});
-		expect(resolvedPrincipal).toBeNull();
+		await expectAsync(scheme.authenticate({
+			credentials: 'Bearer valid-token', request,
+		})).toBeRejectedWithError(UnauthorizedError);
 	});
 
 	it('resolves tokens for active principals', async () => {
-		const result = await authenticator.verifyAccessToken('valid-token');
-		expect(result?.principal_id).toBe('principal-1');
-
-		const resolvedPrincipal =
-			await authenticator.findActivePrincipal({
-				where: { id: principal.id } as Partial<TestPrincipal>,
-			});
-		expect(resolvedPrincipal).toEqual(principal);
+		const result = await scheme.authenticate({
+			credentials: 'Bearer valid-token', request,
+		});
+		expect(result).toEqual(principal);
 	});
 
 	it('rejects tokens when principal lookup fails', async () => {
@@ -76,31 +76,33 @@ describe('RiaoOAuth2BearerAuthenticationScheme Security', () => {
 			principal_id: 'nonexistent-principal',
 		});
 
-		const result = await authenticator.verifyAccessToken('token');
-		expect(result?.principal_id).toBe('nonexistent-principal');
-
-		const resolvedPrincipal =
-			await authenticator.findActivePrincipal({
-				where: { id: 'nonexistent-principal' } as Partial<
-					TestPrincipal
-				>,
-			});
-		expect(resolvedPrincipal).toBeNull();
+		await expectAsync(scheme.authenticate({
+			credentials: 'Bearer valid-token', request,
+		})).toBeRejectedWithError(UnauthorizedError);
 	});
 
-	it('verifies token format validation', async () => {
-		const expiredToken = 'expired.token.here';
-		const result = await authenticator.verifyAccessToken(expiredToken);
-		expect(result).toBeNull();
+	it('rejects invalid tokens before principal lookup', async () => {
+		const lookup = spyOn(authenticator, 'findActivePrincipal');
+		await expectAsync(scheme.authenticate({
+			credentials: 'Bearer expired.token.here', request,
+		})).toBeRejectedWithError(UnauthorizedError);
+		expect(lookup).not.toHaveBeenCalled();
 	});
 
-	it('handles authenticator errors gracefully', async () => {
-		authenticator.verifyAccessToken = async () => {
-			throw new Error('Token verification service unavailable');
-		};
+	it('propagates token verification errors', async () => {
+		const error = new Error('Token verification service unavailable');
+		spyOn(authenticator, 'verifyAccessToken').and.rejectWith(error);
 
-		await expectAsync(
-			authenticator.verifyAccessToken('valid-token')
-		).toBeRejected();
+		await expectAsync(scheme.authenticate({
+			credentials: 'Bearer valid-token', request,
+		})).toBeRejectedWith(error);
+	});
+
+	it('propagates principal lookup errors', async () => {
+		const error = new Error('Principal service unavailable');
+		spyOn(authenticator, 'findActivePrincipal').and.rejectWith(error);
+		await expectAsync(scheme.authenticate({
+			credentials: 'Bearer valid-token', request,
+		})).toBeRejectedWith(error);
 	});
 });
