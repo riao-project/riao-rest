@@ -304,8 +304,11 @@ describe('SearchEndpoint complex aggregation scenarios', () => {
 			.withContext('response status should be 200')
 			.toBe(200);
 
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const body = (await response.json()) as { records: any[]; count: number };
+		const body = (await response.json()) as {
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			records: any[];
+			count: number
+		};
 
 		expect(Array.isArray(body.records))
 			.withContext('body.records should be an array')
