@@ -21,6 +21,10 @@
 		"script": "ts-node scripts",
 		"publish": "npm run script -- publish"
 	},
+	"engines": {
+		"node": ">=22.0.0",
+		"npm": ">=10.8.2"
+	},
 	"dependencies": {
 		"@riao/dbal": "^3.7.0",
 		"@riao/rest-contract": "^1.0.0",
