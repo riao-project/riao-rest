@@ -28,11 +28,11 @@
 	"dependencies": {
 		"@riao/dbal": "^3.7.0",
 		"@riao/rest-contract": "^1.0.0",
-		"api-machine": "^2.0.1",
+		"api-machine": "^2.0.2",
 		"valsan": "^3.0.0"
 	},
 	"peerDependencies": {
-		"api-machine": "^2.0.1",
+		"api-machine": "^2.0.2",
 		"valsan": "^3.0.0"
 	},
 	"devDependencies": {
