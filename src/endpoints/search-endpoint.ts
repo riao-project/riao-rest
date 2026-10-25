@@ -176,7 +176,9 @@ export class RiaoSearchEndpoint<
 		return {};
 	}
 
-	protected async getQuery(request: ApiRequest): Promise<SelectQuery<T>> {
+	protected async getQuery(
+		request: Pick<ApiRequest, 'body'>
+	): Promise<SelectQuery<T>> {
 		let columns = request.body['columns'] as string[] | undefined;
 		const aggregates = request.body['aggregates'] as
 			| RiaoAggregateColumn[]
