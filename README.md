@@ -20,7 +20,8 @@ npm install @riao/rest api-machine valsan
 
 ## Requirements
 
-- Node.js 18+
+- Node.js 22+
+- npm 10.8.2+
 - [@riao/dbal](https://github.com/riao-project/riao-dbal)
 
 ## Quick Start
